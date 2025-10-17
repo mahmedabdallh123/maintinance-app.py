@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 
-file_path = r"C:\Users\LAP ME\Desktop\داتا ساينس دبلومه\new projects\maintinance plan\Machine_Service_Lookup.xlsx"
+file_path = r"C:\Users\LAP ME\Desktop\داتا ساينس دبلومه\new projects\maintinance plan\maintinance-app.py\Machine_Service_Lookup"
 
 # =====================================
 # 🔹 دوال مساعدة
