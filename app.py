@@ -18,7 +18,7 @@ def normalize_name(s):
 def get_service_status(machine_df, plan_df, machine_id, current_tons):
     machine_id = normalize_name(machine_id)
     df_machine = machine_df.copy()
-    df_machine["Normalized"] = df_machine["Card"].apply(normalize_name)
+    df_machine["Normalized"] = df_machine["card"].apply(normalize_name)
 
     row = df_machine[df_machine["Normalized"] == machine_id]
     if row.empty:
