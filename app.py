@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import re
 import time
+import json
+import os
 
 # ===============================
 # 📂 تحميل البيانات من الإكسيل
@@ -13,6 +15,7 @@ def load_all_sheets():
     except FileNotFoundError:
         st.error("❌ لم يتم العثور على الملف Machine_Service_Lookup.xlsx في نفس المجلد.")
         st.stop()
+
 
 # ===============================
 # 🔠 دوال مساعدة
@@ -34,42 +37,50 @@ def split_needed_services(needed_service_str):
     parts = re.split(r"\+|,|\n|;", needed_service_str)
     return [p.strip() for p in parts if p.strip() != ""]
 
+
 # ===============================
-# 🔒 نظام الأمان بالباسورد + عداد
+# 🔑 نظام الـ Tokens لتجربة مجانية
 # ===============================
-def security_timer():
-    if "auth" not in st.session_state:
-        st.session_state.auth = False
-        st.session_state.start_time = time.time()
-        st.session_state.timer_mode = "trial"  # trial -> 60s, full -> 600s
+TOKENS_FILE = "tokens.json"
 
-    elapsed = time.time() - st.session_state.start_time
+def load_tokens():
+    if not os.path.exists(TOKENS_FILE):
+        with open(TOKENS_FILE, "w") as f:
+            json.dump({}, f)
+    with open(TOKENS_FILE, "r") as f:
+        return json.load(f)
 
-    if not st.session_state.auth:
-        remaining = 60 - int(elapsed)
-        if remaining > 0:
-            st.warning(f"⏳ مهلة التجربة المجانية تنتهي خلال {remaining} ثانية...")
+def save_tokens(tokens):
+    with open(TOKENS_FILE, "w") as f:
+        json.dump(tokens, f, indent=4)
+
+def check_token():
+    query_params = st.query_params
+    token = query_params.get("token", [None])[0]
+
+    if not token:
+        st.error("🚫 لم يتم تمرير رمز (token) في الرابط.")
+        st.stop()
+
+    tokens = load_tokens()
+
+    if token not in tokens:
+        st.error("❌ هذا الرمز غير صالح أو غير مسموح به.")
+        st.stop()
+
+    if tokens[token]["used"]:
+        st.error("🔒 تم استخدام هذا الرابط مسبقًا. يرجى إدخال كلمة المرور للمتابعة.")
+        password = st.text_input("كلمة المرور:", type="password")
+        if password == "1234":
+            st.success("✅ تم تسجيل الدخول بنجاح.")
+            return True
         else:
-            st.error("🔒 انتهت المهلة التجريبية. يرجى إدخال كلمة المرور للمتابعة.")
-            password = st.text_input("أدخل كلمة المرور:", type="password")
-            if password == "1234":
-                st.success("✅ تم تسجيل الدخول بنجاح.")
-                st.session_state.auth = True
-                st.session_state.start_time = time.time()
-                st.session_state.timer_mode = "full"
-                st.rerun()
-            else:
-                st.stop()
-
-    elif st.session_state.auth:
-        limit = 600 if st.session_state.timer_mode == "full" else 60
-        remaining = limit - int(elapsed)
-        if remaining <= 0:
-            st.session_state.auth = False
-            st.error("🔐 انتهت الجلسة، سيتم القفل.")
-            st.rerun()
-        else:
-            st.info(f"⏰ الجلسة ستنتهي بعد {remaining} ثانية.")
+            st.stop()
+    else:
+        st.info("🎁 تجربة مجانية متاحة لهذا الرابط. سيتم تسجيلها الآن.")
+        tokens[token]["used"] = True
+        save_tokens(tokens)
+        return True
 
 
 # ===============================
@@ -88,7 +99,6 @@ def check_machine_status(card_num, current_tons, all_sheets):
 
     card_df = all_sheets[card_sheet_name]
 
-    # --- 🟢 تحديد الشريحة الحالية ---
     current_slice = service_plan_df[
         (service_plan_df["Min_Tons"] <= current_tons) &
         (service_plan_df["Max_Tons"] >= current_tons)
@@ -100,12 +110,10 @@ def check_machine_status(card_num, current_tons, all_sheets):
 
     min_tons = current_slice["Min_Tons"].values[0]
     max_tons = current_slice["Max_Tons"].values[0]
-
     needed_service_raw = current_slice["Service"].values[0]
     needed_parts = split_needed_services(needed_service_raw)
     needed_norm = [normalize_name(p) for p in needed_parts]
 
-    # --- 🟡 فلترة البيانات المنفذة داخل نفس الشريحة فقط ---
     slice_df = card_df[
         (card_df["card"] == card_num) &
         (card_df["Tones"] >= min_tons) &
@@ -169,7 +177,6 @@ def check_machine_status(card_num, current_tons, all_sheets):
     styled_df = result_df.style.apply(style_table, axis=1)
     st.dataframe(styled_df, use_container_width=True)
 
-    # 💾 خيار حفظ النتيجة
     save = st.button("💾 حفظ النتيجة في Excel")
     if save:
         result_df.to_excel("Machine_Result.xlsx", index=False)
@@ -181,14 +188,13 @@ def check_machine_status(card_num, current_tons, all_sheets):
 # ===============================
 # 🖥 واجهة Streamlit
 # ===============================
-security_timer()
-
 st.title("🔧 نظام متابعة الصيانة التنبؤية")
-st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
 
-all_sheets = load_all_sheets()
-card_num = st.number_input("رقم الماكينة:", min_value=1, step=1)
-current_tons = st.number_input("عدد الأطنان الحالية:", min_value=0, step=100)
+if check_token():
+    st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
+    all_sheets = load_all_sheets()
+    card_num = st.number_input("رقم الماكينة:", min_value=1, step=1)
+    current_tons = st.number_input("عدد الأطنان الحالية:", min_value=0, step=100)
 
-if st.button("عرض الحالة"):
-    check_machine_status(card_num, current_tons, all_sheets)
+    if st.button("عرض الحالة"):
+        check_machine_status(card_num, current_tons, all_sheets)
