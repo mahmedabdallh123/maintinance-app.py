@@ -115,3 +115,18 @@ def check_machine_status(card_num, current_tons, all_sheets):
     status = "❌ لم يتم تنفيذ صيانة في هذه الشريحة"
 
     if not slice_df.empty:
+    last_row = slice_df.iloc[-1]
+    last_date = last_row.get("Date", "-")
+    last_tons = last_row.get("Tones", "-")
+
+    ignore_cols = ["card", "Tones", "Date", "Current_Tons",
+                   "Service Needed", "Min_Tons", "Max_Tons"]
+
+    for col in card_df.columns:
+        if col not in ignore_cols:
+            val = str(last_row.get(col, "")).strip().lower()
+            if val and val not in ["nan", "none", ""]:
+                done_services.append(col)
+
+    if done_services:
+        status = "✅ تم تنفيذ صيانة في هذه الشريحة"
