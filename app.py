@@ -57,17 +57,25 @@ def check_token():
     tokens = load_tokens()
     available_tokens = [t for t, v in tokens.items() if not v.get("used", False)]
 
-    # إذا المستخدم مفعل قبل كده
+    # لو بالفعل تم تسجيل الدخول قبل كده
     if "access_granted" in st.session_state and st.session_state["access_granted"]:
         return True
 
-    # لو عنده جلسة تجربة مفتوحة
+    # لو التجربة المجانية بدأت بالفعل
     if "trial_start" in st.session_state:
         elapsed = int(time.time() - st.session_state["trial_start"])
         remaining = 60 - elapsed
+
         if remaining > 0:
-            st.markdown(f"<h4 style='color:green;'>⏳ التجربة المجانية: {remaining} ثانية متبقية</h4>", unsafe_allow_html=True)
-            return True
+            countdown_placeholder = st.empty()
+            for i in range(remaining, 0, -1):
+                countdown_placeholder.markdown(
+                    f"<h4 style='color:green;'>⏳ التجربة المجانية: {i} ثانية متبقية</h4>",
+                    unsafe_allow_html=True
+                )
+                time.sleep(1)
+                st.session_state["trial_start"] = time.time() - (remaining - i)
+                st.rerun()
         else:
             st.error("⏰ انتهت التجربة المجانية. أدخل كلمة المرور للمتابعة.")
             password = st.text_input("كلمة المرور:", type="password")
@@ -78,14 +86,14 @@ def check_token():
             else:
                 st.stop()
 
-    # تفعيل رمز لأول مرة
+    # تفعيل رمز مجاني لأول مرة
     if available_tokens:
         token = st.selectbox("اختر رمز التجربة المجانية:", available_tokens)
         if st.button("تفعيل الرمز"):
             tokens[token]["used"] = True
             save_tokens(tokens)
             st.session_state["trial_start"] = time.time()
-            st.success(f"🎁 تم تفعيل الرمز ({token}) — التجربة المجانية بدأت الآن لمدة 60 ثانية ⏳")
+            st.success(f"🎁 تم تفعيل الرمز ({token}) — التجربة المجانية بدأت الآن ⏳")
             st.rerun()
     else:
         st.warning("🔒 جميع الرموز استخدمت. أدخل كلمة المرور للوصول:")
