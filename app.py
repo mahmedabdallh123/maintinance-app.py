@@ -18,38 +18,28 @@ def load_all_sheets():
         st.stop()
 
 # ===============================
-# 🔠 دوال مساعدة
-# ===============================
-def normalize_name(s):
-    if s is None:
-        return ""
-    s = str(s)
-    s = s.replace("\n", "+")
-    s = re.sub(r"👦.*?👦", "", s)
-    s = re.sub(r"[^0-9a-zA-Z\u0600-\u06FF\+\s_/.-]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip().lower()
-    return s
-
-def split_needed_services(needed_service_str):
-    if not isinstance(needed_service_str, str) or needed_service_str.strip() == "":
-        return []
-    parts = re.split(r"\+|,|\n|;", needed_service_str)
-    return [p.strip() for p in parts if p.strip() != ""]
-
-# ===============================
-# 🔑 نظام التجربة المجانية + كلمة المرور
+# 🔑 نظام التجربة المجانية مع باسورد
 # ===============================
 TOKENS_FILE = "tokens.json"
-TRIAL_SECONDS = 60     # مدة التجربة 60 ثانية
-RENEW_HOURS = 24       # إعادة التجربة كل 24 ساعة
-PASSWORD = "1234"      # كلمة المرور لمتابعة بعد التجربة
+TRIAL_SECONDS = 60    # مدة التجربة بالثواني
+RENEW_HOURS = 24      # عدد الساعات قبل إعادة التجربة
+PASSWORD = "1234"     # كلمة المرور
 
 def load_tokens():
     if not os.path.exists(TOKENS_FILE):
         with open(TOKENS_FILE, "w") as f:
             json.dump({}, f)
-    with open(TOKENS_FILE, "r") as f:
-        return json.load(f)
+        return {}
+    try:
+        with open(TOKENS_FILE, "r") as f:
+            content = f.read().strip()
+            if not content:
+                return {}
+            return json.loads(content)
+    except (json.JSONDecodeError, ValueError):
+        with open(TOKENS_FILE, "w") as f:
+            json.dump({}, f)
+        return {}
 
 def save_tokens(tokens):
     with open(TOKENS_FILE, "w") as f:
@@ -86,6 +76,7 @@ def check_free_trial(user_id="default_user"):
     tokens = load_tokens()
     now_ts = int(time.time())
 
+    # لو المستخدم جديد
     if user_id not in tokens:
         tokens[user_id] = {"last_trial": 0}
         save_tokens(tokens)
@@ -93,39 +84,60 @@ def check_free_trial(user_id="default_user"):
     last_trial = tokens[user_id]["last_trial"]
     hours_since_last = (now_ts - last_trial) / 3600
 
-    # إذا مرّت 24 ساعة، يمكن إعادة التجربة
-    if hours_since_last >= RENEW_HOURS:
-        if st.button("تفعيل التجربة المجانية 60 ثانية"):
-            st.session_state["trial_start"] = now_ts
-            tokens[user_id]["last_trial"] = now_ts
-            save_tokens(tokens)
-            st.success("🎁 تم تفعيل التجربة المجانية لمدة 60 ثانية ⏳")
-            st.experimental_rerun()
-
-    # إذا التجربة بدأت
-    if "trial_start" in st.session_state and st.session_state["trial_start"]:
+    # لو التجربة شغالة بالفعل
+    if "trial_start" in st.session_state:
         elapsed = now_ts - st.session_state["trial_start"]
         if elapsed < TRIAL_SECONDS:
             render_countdown(st.session_state["trial_start"], TRIAL_SECONDS)
             st.info("✅ التجربة المجانية مفعّلة — استخدم التطبيق الآن")
             return True
         else:
-            st.warning("⏰ انتهت التجربة المجانية. يمكنك استخدام التطبيق بالكلمة السرية.")
-            password = st.text_input("🔑 أدخل كلمة المرور للمتابعة:", type="password")
+            st.warning("⏰ انتهت التجربة المجانية. يمكنك إعادة التجربة بعد مرور 24 ساعة أو الدخول بالباسورد.")
+            password = st.text_input("أدخل كلمة المرور للوصول:", type="password")
             if password == PASSWORD:
-                st.success("✅ تم قبول كلمة المرور، يمكنك متابعة التطبيق")
+                st.success("✅ تم تسجيل الدخول بنجاح بالباسورد.")
+                st.session_state["access_granted"] = True
                 return True
             return False
 
-    # إذا لم يبدأ المستخدم التجربة اليوم
-    remaining_hours = max(0, 24 - hours_since_last)
-    st.warning(f"🔒 انتهت التجربة المجانية. يمكنك المحاولة مرة أخرى بعد {remaining_hours:.1f} ساعة أو باستخدام كلمة المرور.")
-    password = st.text_input("🔑 أدخل كلمة المرور للمتابعة:", type="password")
-    if password == PASSWORD:
-        st.success("✅ تم قبول كلمة المرور، يمكنك متابعة التطبيق")
-        return True
+    # إذا مرّت 24 ساعة منذ آخر تجربة
+    if hours_since_last >= RENEW_HOURS:
+        if st.button("تفعيل التجربة المجانية 60 ثانية"):
+            tokens[user_id]["last_trial"] = now_ts
+            save_tokens(tokens)
+            st.session_state["trial_start"] = now_ts
+            st.success("🎁 تم تفعيل التجربة المجانية لمدة 60 ثانية ⏳")
+            st.experimental_rerun()
+        return False
 
+    # لو لم يمر 24 ساعة
+    remaining_hours = max(0, RENEW_HOURS - hours_since_last)
+    st.warning(f"🔒 انتهت التجربة المجانية. يمكنك إعادة التجربة بعد {remaining_hours:.1f} ساعة أو الدخول بالباسورد.")
+    password = st.text_input("أدخل كلمة المرور للوصول:", type="password")
+    if password == PASSWORD:
+        st.success("✅ تم تسجيل الدخول بنجاح بالباسورد.")
+        st.session_state["access_granted"] = True
+        return True
     return False
+
+# ===============================
+# 🔠 دوال مساعدة
+# ===============================
+def normalize_name(s):
+    if s is None:
+        return ""
+    s = str(s)
+    s = s.replace("\n", "+")
+    s = re.sub(r"👦.*?👦", "", s)
+    s = re.sub(r"[^0-9a-zA-Z\u0600-\u06FF\+\s_/.-]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip().lower()
+    return s
+
+def split_needed_services(needed_service_str):
+    if not isinstance(needed_service_str, str) or needed_service_str.strip() == "":
+        return []
+    parts = re.split(r"\+|,|\n|;", needed_service_str)
+    return [p.strip() for p in parts if p.strip() != ""]
 
 # ===============================
 # ⚙ دالة مقارنة الصيانة
@@ -229,7 +241,7 @@ def check_machine_status(card_num, current_tons, all_sheets):
 # ===============================
 st.title("🔧 نظام متابعة الصيانة التنبؤية")
 
-if check_free_trial(user_id="default_user"):
+if check_free_trial(user_id="default_user") or st.session_state.get("access_granted", False):
     all_sheets = load_all_sheets()
     st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
     card_num = st.number_input("رقم الماكينة:", min_value=1, step=1)
