@@ -214,7 +214,7 @@ if check_token():
             st.progress((60 - remaining) / 60)
             st.info(f"⏳ التجربة المجانية: {remaining} ثانية متبقية")
 
-   st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
+    st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
     card_num = st.number_input("رقم الماكينة:", min_value=1, step=1)
     current_tons = st.number_input("عدد الأطنان الحالية:", min_value=0, step=100)
 
