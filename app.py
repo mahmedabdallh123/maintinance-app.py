@@ -16,7 +16,6 @@ def load_all_sheets():
         st.error("❌ لم يتم العثور على الملف Machine_Service_Lookup.xlsx في نفس المجلد.")
         st.stop()
 
-
 # ===============================
 # 🔠 دوال مساعدة
 # ===============================
@@ -30,16 +29,14 @@ def normalize_name(s):
     s = re.sub(r"\s+", " ", s).strip().lower()
     return s
 
-
 def split_needed_services(needed_service_str):
     if not isinstance(needed_service_str, str) or needed_service_str.strip() == "":
         return []
     parts = re.split(r"\+|,|\n|;", needed_service_str)
     return [p.strip() for p in parts if p.strip() != ""]
 
-
 # ===============================
-# 🔑 نظام الـ Tokens (إدخال يدوي)
+# 🔑 نظام الـ Tokens مع عداد التجربة
 # ===============================
 TOKENS_FILE = "tokens.json"
 
@@ -59,24 +56,46 @@ def check_token():
 
     tokens = load_tokens()
     available_tokens = [t for t, v in tokens.items() if not v.get("used", False)]
-    used_tokens = [t for t, v in tokens.items() if v.get("used", False)]
 
-    # لو مفيش رموز خالص
     if not tokens:
         st.error("❌ لا توجد رموز متاحة في الملف tokens.json.")
         st.stop()
 
-    # لو في رموز غير مستخدمة
+    # إذا المستخدم دخل قبل كده
+    if "access_granted" in st.session_state and st.session_state["access_granted"]:
+        if "countdown_start" not in st.session_state:
+            st.session_state["countdown_start"] = time.time()
+
+        remaining = 60 - int(time.time() - st.session_state["countdown_start"])
+
+        if remaining > 0:
+            st.markdown(
+                f"<h3 style='color:green;'>⏳ وقت التجربة المتبقي: {remaining} ثانية</h3>",
+                unsafe_allow_html=True
+            )
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.error("⏰ انتهى وقت التجربة المجانية. يرجى إدخال كلمة المرور للمتابعة.")
+            password = st.text_input("كلمة المرور:", type="password")
+            if password == "1234":
+                st.success("✅ تم تسجيل الدخول بنجاح.")
+                return True
+            else:
+                st.stop()
+        return True
+
+    # أول مرة يفتح
     if available_tokens:
         token = st.selectbox("اختر رمز التجربة المجانية:", available_tokens)
         if st.button("تفعيل الرمز"):
             tokens[token]["used"] = True
             save_tokens(tokens)
-            st.success(f"✅ تم تفعيل الرمز ({token}) بنجاح! يمكنك الدخول الآن.")
             st.session_state["access_granted"] = True
+            st.session_state["countdown_start"] = time.time()
+            st.success(f"✅ تم تفعيل الرمز ({token}) بنجاح! تبدأ التجربة المجانية الآن ⏳")
             st.rerun()
     else:
-        # كل الرموز مستخدمة → نطلب باسورد
         st.warning("🔒 جميع الرموز استخدمت. أدخل كلمة المرور للوصول:")
         password = st.text_input("كلمة المرور:", type="password")
         if password == "1234":
@@ -87,7 +106,6 @@ def check_token():
             st.stop()
 
     return st.session_state.get("access_granted", False)
-
 
 # ===============================
 # ⚙ دالة مقارنة الصيانة
@@ -104,7 +122,6 @@ def check_machine_status(card_num, current_tons, all_sheets):
         return None
 
     card_df = all_sheets[card_sheet_name]
-
     current_slice = service_plan_df[
         (service_plan_df["Min_Tons"] <= current_tons) &
         (service_plan_df["Max_Tons"] >= current_tons)
@@ -162,7 +179,6 @@ def check_machine_status(card_num, current_tons, all_sheets):
 
     result_df = pd.DataFrame([result])
 
-    # 🎨 تلوين الجدول
     def highlight(val, col_name):
         if col_name == "Service Needed":
             return "background-color: #fff3cd; color: #856404; font-weight: bold;"
@@ -190,17 +206,16 @@ def check_machine_status(card_num, current_tons, all_sheets):
 
     return result_df
 
-
 # ===============================
 # 🖥 واجهة Streamlit
 # ===============================
 st.title("🔧 نظام متابعة الصيانة التنبؤية")
 
 if check_token():
-    st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
     all_sheets = load_all_sheets()
+    st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
     card_num = st.number_input("رقم الماكينة:", min_value=1, step=1)
     current_tons = st.number_input("عدد الأطنان الحالية:", min_value=0, step=100)
 
     if st.button("عرض الحالة"):
-        check_machine_status(card_num, current_tons, all_sheets)  نظام توكينز فعال
+        check_machine_status(card_num, current_tons, all_sheets)
