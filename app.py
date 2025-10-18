@@ -7,10 +7,11 @@ import time
 # ===============================
 # 🔒 إعداد الأمان (Security)
 # ===============================
-PASSWORD = "1234"  # 🔑 غيّر الباسورد هنا
-FREE_ACCESS_TIME = 60        # ثانية
-LOGIN_ACCESS_TIME = 600      # ثانية
+PASSWORD = "1234"              # 🔑 غيّر الباسورد هنا
+FREE_ACCESS_TIME = 60           # ثانية المهلة المجانية
+LOGIN_ACCESS_TIME = 600         # ثانية بعد تسجيل الدخول
 
+# تخزين الجلسة
 if "session_start" not in st.session_state:
     st.session_state.session_start = time.time()
 if "is_authenticated" not in st.session_state:
@@ -18,13 +19,26 @@ if "is_authenticated" not in st.session_state:
 if "auth_start_time" not in st.session_state:
     st.session_state.auth_start_time = None
 
+# دالة لتنسيق الوقت (ثواني → دقيقة:ثانية)
+def format_time(seconds):
+    minutes = int(seconds // 60)
+    secs = int(seconds % 60)
+    return f"{minutes:02d}:{secs:02d}"
+
+# 🔐 فحص الأمان والعداد
 def check_security():
     current_time = time.time()
 
-    # 1️⃣ السماح الحر لمدة 60 ثانية
+    # 🕐 فترة التجربة المجانية
     if not st.session_state.is_authenticated:
-        if current_time - st.session_state.session_start < FREE_ACCESS_TIME:
-            return True
+        elapsed = current_time - st.session_state.session_start
+        remaining = FREE_ACCESS_TIME - elapsed
+
+        if remaining > 0:
+            st.info(f"🕒 مهلة التجربة المجانية المتبقية: {format_time(remaining)}")
+            st.progress(max(0, remaining / FREE_ACCESS_TIME))
+            time.sleep(1)
+            st.experimental_rerun()
         else:
             st.warning("🔒 انتهت المهلة المجانية. أدخل كلمة المرور للمتابعة.")
             password_input = st.text_input("كلمة المرور:", type="password")
@@ -38,19 +52,27 @@ def check_security():
                     st.error("❌ كلمة المرور غير صحيحة.")
             st.stop()
 
-    # 2️⃣ السماح بعد تسجيل الدخول لمدة 600 ثانية
+    # 🔑 فترة السماح بعد تسجيل الدخول
     elif st.session_state.is_authenticated:
-        if current_time - st.session_state.auth_start_time > LOGIN_ACCESS_TIME:
+        elapsed = current_time - st.session_state.auth_start_time
+        remaining = LOGIN_ACCESS_TIME - elapsed
+
+        if remaining > 0:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.info(f"⏳ الوقت المتبقي قبل انتهاء الجلسة: {format_time(remaining)}")
+            with col2:
+                st.progress(max(0, remaining / LOGIN_ACCESS_TIME))
+            time.sleep(1)
+            st.experimental_rerun()
+            return True
+        else:
             st.session_state.is_authenticated = False
             st.session_state.session_start = time.time()
             st.warning("⏰ انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجددًا.")
             st.stop()
-        else:
-            return True
 
-# ===============================
 # ✅ تنفيذ فحص الأمان أولاً
-# ===============================
 check_security()
 
 # ===============================
@@ -72,7 +94,7 @@ def normalize_name(s):
         return ""
     s = str(s)
     s = s.replace("\n", "+")
-    s = re.sub(r"\(.*?\)", "", s)
+    s = re.sub(r"👦.*?👦", "", s)
     s = re.sub(r"[^0-9a-zA-Z\u0600-\u06FF\+\s_/.-]", " ", s)
     s = re.sub(r"\s+", " ", s).strip().lower()
     return s
@@ -158,42 +180,3 @@ def check_machine_status(card_num, current_tons, all_sheets):
     def highlight_columns(val, col_name, status):
         if col_name == "Service Needed":
             return "background-color: #fff3cd; color: #856404; font-weight: bold;"  # أصفر
-        elif col_name == "Done Services" or ("تم تنفيذ" in status and col_name == "Status"):
-            return "background-color: #d4edda; color: #155724; font-weight: bold;"  # أخضر
-        elif col_name == "Not Done Services" or ("لم يتم" in status and col_name == "Status"):
-            return "background-color: #f8d7da; color: #721c24; font-weight: bold;"  # أحمر
-        else:
-            return ""
-
-    def style_table(row):
-        return [highlight_columns(row[col], col, row["Status"]) for col in row.index]
-
-    styled_df = result_df.style.apply(style_table, axis=1)
-    st.dataframe(styled_df, use_container_width=True)
-
-    # 💾 زر التحميل
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        result_df.to_excel(writer, index=False, sheet_name="Result")
-    excel_data = output.getvalue()
-
-    st.download_button(
-        label="💾 تحميل النتيجة كملف Excel",
-        data=excel_data,
-        file_name=f"Service_Result_Card{card_num}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-    return result_df
-
-# ===============================
-# 🖥 واجهة Streamlit
-# ===============================
-st.title("🔧 نظام متابعة الصيانة التنبؤية")
-st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
-
-all_sheets = load_all_sheets()
-card_num = st.number_input("رقم الماكينة:", min_value=1, step=1)
-current_tons = st.number_input("عدد الأطنان الحالية:", min_value=0, step=100)
-
-if st.button("عرض الحالة"):
-    check_machine_status(card_num, current_tons, all_sheets)
