@@ -36,7 +36,7 @@ def split_needed_services(needed_service_str):
     return [p.strip() for p in parts if p.strip() != ""]
 
 # ===============================
-# 🔑 نظام الـ Tokens مع عداد التجربة
+# 🔑 نظام الـ Tokens + العداد
 # ===============================
 TOKENS_FILE = "tokens.json"
 
@@ -52,48 +52,40 @@ def save_tokens(tokens):
         json.dump(tokens, f, indent=4, ensure_ascii=False)
 
 def check_token():
-    st.subheader("🔐 الدخول إلى النظام")
+    st.subheader("🔐 تسجيل الدخول أو تفعيل الرمز")
 
     tokens = load_tokens()
     available_tokens = [t for t, v in tokens.items() if not v.get("used", False)]
 
-    if not tokens:
-        st.error("❌ لا توجد رموز متاحة في الملف tokens.json.")
-        st.stop()
-
-    # إذا المستخدم دخل قبل كده
+    # إذا المستخدم مفعل قبل كده
     if "access_granted" in st.session_state and st.session_state["access_granted"]:
-        if "countdown_start" not in st.session_state:
-            st.session_state["countdown_start"] = time.time()
+        return True
 
-        remaining = 60 - int(time.time() - st.session_state["countdown_start"])
-
+    # لو عنده جلسة تجربة مفتوحة
+    if "trial_start" in st.session_state:
+        elapsed = int(time.time() - st.session_state["trial_start"])
+        remaining = 60 - elapsed
         if remaining > 0:
-            st.markdown(
-                f"<h3 style='color:green;'>⏳ وقت التجربة المتبقي: {remaining} ثانية</h3>",
-                unsafe_allow_html=True
-            )
-            time.sleep(1)
-            st.rerun()
+            st.markdown(f"<h4 style='color:green;'>⏳ التجربة المجانية: {remaining} ثانية متبقية</h4>", unsafe_allow_html=True)
+            return True
         else:
-            st.error("⏰ انتهى وقت التجربة المجانية. يرجى إدخال كلمة المرور للمتابعة.")
+            st.error("⏰ انتهت التجربة المجانية. أدخل كلمة المرور للمتابعة.")
             password = st.text_input("كلمة المرور:", type="password")
             if password == "1234":
                 st.success("✅ تم تسجيل الدخول بنجاح.")
+                st.session_state["access_granted"] = True
                 return True
             else:
                 st.stop()
-        return True
 
-    # أول مرة يفتح
+    # تفعيل رمز لأول مرة
     if available_tokens:
         token = st.selectbox("اختر رمز التجربة المجانية:", available_tokens)
         if st.button("تفعيل الرمز"):
             tokens[token]["used"] = True
             save_tokens(tokens)
-            st.session_state["access_granted"] = True
-            st.session_state["countdown_start"] = time.time()
-            st.success(f"✅ تم تفعيل الرمز ({token}) بنجاح! تبدأ التجربة المجانية الآن ⏳")
+            st.session_state["trial_start"] = time.time()
+            st.success(f"🎁 تم تفعيل الرمز ({token}) — التجربة المجانية بدأت الآن لمدة 60 ثانية ⏳")
             st.rerun()
     else:
         st.warning("🔒 جميع الرموز استخدمت. أدخل كلمة المرور للوصول:")
@@ -101,7 +93,7 @@ def check_token():
         if password == "1234":
             st.success("✅ تم تسجيل الدخول بنجاح.")
             st.session_state["access_granted"] = True
-            st.rerun()
+            return True
         else:
             st.stop()
 
@@ -213,9 +205,14 @@ st.title("🔧 نظام متابعة الصيانة التنبؤية")
 
 if check_token():
     all_sheets = load_all_sheets()
-    st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
-    card_num = st.number_input("رقم الماكينة:", min_value=1, step=1)
-    current_tons = st.number_input("عدد الأطنان الحالية:", min_value=0, step=100)
 
-    if st.button("عرض الحالة"):
-        check_machine_status(card_num, current_tons, all_sheets)
+    # ✅ عرض العداد أثناء الاستخدام
+    if "trial_start" in st.session_state:
+        elapsed = int(time.time() - st.session_state["trial_start"])
+        remaining = 60 - elapsed
+        if remaining > 0:
+            st.progress((60 - remaining) / 60)
+            st.info(f"⏳ التجربة المجانية: {remaining} ثانية متبقية")
+
+    st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
+    card_num = st.number_input("رقم الم
