@@ -58,7 +58,7 @@ def check_machine_status(card_num, current_tons, all_sheets):
         st.warning("⚠️ لم يتم العثور على شريحة تناسب عدد الأطنان الحالي.")
         return None
 
-    # نستخدم الحدود داخلياً فقط بدون عرضهم في النتيجة
+    # حدود الشريحة (نستخدمها فقط داخلياً)
     min_tons = current_slice["Min_Tons"].values[0]
     max_tons = current_slice["Max_Tons"].values[0]
 
@@ -81,8 +81,13 @@ def check_machine_status(card_num, current_tons, all_sheets):
         last_date = last_row.get("Date", "-")
         last_tons = last_row.get("Tones", "-")
 
+        # الأعمدة اللي نتجاهلها تماماً
+        ignore_cols = ["card", "Tones", "Date", "Current_Tons", 
+                       "Service Needed", "Min_Tons", "Max_Tons"]
+
+        # نمر فقط على الأعمدة الباقية
         for col in card_df.columns:
-            if col not in ["card", "Tones", "Date", "Current_Tons", "Service Needed"]:
+            if col not in ignore_cols:
                 val = str(last_row.get(col, "")).strip().lower()
                 if val and val not in ["nan", "none", ""]:
                     done_services.append(col)
@@ -93,7 +98,7 @@ def check_machine_status(card_num, current_tons, all_sheets):
     done_norm = [normalize_name(c) for c in done_services]
     not_done = [orig for orig, n in zip(needed_parts, needed_norm) if n not in done_norm]
 
-    # --- 🧾 النتيجة بدون أعمدة الشريحة ---
+    # --- 🧾 النتيجة النهائية ---
     result = {
         "Card": card_num,
         "Current_Tons": current_tons,
