@@ -18,11 +18,11 @@ def load_all_sheets():
         st.stop()
 
 # ===============================
-# 🔑 نظام تجربة مجانية 60 ثانية + تجديد كل 24 ساعة
+# 🔧 إعداد تجربة مجانية 60 ثانية مع إعادة تفعيل كل 24 ساعة
 # ===============================
 TOKENS_FILE = "tokens.json"
-TRIAL_SECONDS = 60        # مدة التجربة 60 ثانية
-RENEW_HOURS = 24          # فترة الانتظار قبل إعادة التجربة
+TRIAL_SECONDS = 60     # مدة التجربة 60 ثانية
+RENEW_HOURS = 24       # إعادة التجربة بعد 24 ساعة
 
 def load_tokens():
     if not os.path.exists(TOKENS_FILE):
@@ -63,10 +63,13 @@ def render_countdown(start_ts, seconds=TRIAL_SECONDS):
     components.html(html, height=120)
 
 def check_free_trial(user_id="default_user"):
+    if "trial_start" not in st.session_state:
+        st.session_state["trial_start"] = 0
+
     tokens = load_tokens()
     now_ts = int(time.time())
 
-    # سجل جديد للمستخدم إذا لم يكن موجود
+    # إذا المستخدم جديد، أضف له سجل
     if user_id not in tokens:
         tokens[user_id] = {"last_trial": 0}
         save_tokens(tokens)
@@ -74,18 +77,8 @@ def check_free_trial(user_id="default_user"):
     last_trial = tokens[user_id]["last_trial"]
     hours_since_last = (now_ts - last_trial) / 3600
 
-    # إعادة التجربة بعد 24 ساعة
-    if hours_since_last >= RENEW_HOURS:
-        if st.button("تفعيل التجربة المجانية 60 ثانية"):
-            tokens[user_id]["last_trial"] = now_ts
-            save_tokens(tokens)
-            st.session_state["trial_start"] = now_ts
-            st.success("🎁 تم تفعيل التجربة المجانية لمدة 60 ثانية ⏳")
-            st.experimental_rerun()
-        return False
-
-    # التجربة الحالية
-    if "trial_start" in st.session_state:
+    # إذا التجربة بدأت مسبقًا ولم تنتهِ
+    if st.session_state["trial_start"]:
         elapsed = now_ts - st.session_state["trial_start"]
         if elapsed < TRIAL_SECONDS:
             render_countdown(st.session_state["trial_start"], TRIAL_SECONDS)
@@ -95,8 +88,18 @@ def check_free_trial(user_id="default_user"):
             st.warning("⏰ انتهت التجربة المجانية. يمكنك إعادة التجربة بعد مرور 24 ساعة من آخر مرة.")
             return False
 
-    # إذا لم يبدأ التجربة بعد
-    remaining_hours = max(0, RENEW_HOURS - hours_since_last)
+    # إذا مرّت 24 ساعة منذ آخر تجربة
+    if hours_since_last >= RENEW_HOURS:
+        if st.button("تفعيل التجربة المجانية 60 ثانية"):
+            st.session_state["trial_start"] = now_ts
+            tokens[user_id]["last_trial"] = now_ts
+            save_tokens(tokens)
+            st.success(f"🎁 تم تفعيل التجربة المجانية لمدة {TRIAL_SECONDS} ثانية ⏳")
+            st.experimental_rerun()
+        return False
+
+    # إذا لم تنتهِ الـ 24 ساعة بعد
+    remaining_hours = max(0, 24 - hours_since_last)
     st.warning(f"🔒 انتهت التجربة المجانية. يمكنك المحاولة مرة أخرى بعد {remaining_hours:.1f} ساعة")
     return False
 
@@ -108,6 +111,7 @@ def normalize_name(s):
         return ""
     s = str(s)
     s = s.replace("\n", "+")
+    s = re.sub(r"👦.*?👦", "", s)
     s = re.sub(r"[^0-9a-zA-Z\u0600-\u06FF\+\s_/.-]", " ", s)
     s = re.sub(r"\s+", " ", s).strip().lower()
     return s
@@ -190,13 +194,13 @@ def check_machine_status(card_num, current_tons, all_sheets):
     # 🎨 تلوين الأعمدة
     def highlight_cell(val, col_name):
         if col_name == "Service Needed":
-            return "background-color: #fff3cd; color:#856404; font-weight:bold;"
+            return "background-color: #fff3cd; color:#856404; font-weight:bold;"  # أصفر
         elif col_name == "Done Services":
-            return "background-color: #d4edda; color:#155724; font-weight:bold;"
+            return "background-color: #d4edda; color:#155724; font-weight:bold;"  # أخضر
         elif col_name == "Not Done Services":
-            return "background-color: #f8d7da; color:#721c24; font-weight:bold;"
+            return "background-color: #f8d7da; color:#721c24; font-weight:bold;"  # أحمر
         elif col_name in ["Date", "Tones"]:
-            return "background-color: #e7f1ff; color:#004085;"
+            return "background-color: #e7f1ff; color:#004085;"  # أزرق فاتح
         elif col_name == "Status":
             if "✅" in val:
                 return "background-color:#c3e6cb; color:#155724;"
