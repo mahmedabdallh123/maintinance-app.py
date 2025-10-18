@@ -211,13 +211,13 @@ def check_machine_status(card_num, current_tons, all_sheets):
     # 🎨 تلوين الأعمدة
     def highlight_cell(val, col_name):
         if col_name == "Service Needed":
-            return "background-color: #fff3cd; color:#856404; font-weight:bold;"  # أصفر
+            return "background-color: #fff3cd; color:#856404; font-weight:bold;"
         elif col_name == "Done Services":
-            return "background-color: #d4edda; color:#155724; font-weight:bold;"  # أخضر
+            return "background-color: #d4edda; color:#155724; font-weight:bold;"
         elif col_name == "Not Done Services":
-            return "background-color: #f8d7da; color:#721c24; font-weight:bold;"  # أحمر
+            return "background-color: #f8d7da; color:#721c24; font-weight:bold;"
         elif col_name in ["Date", "Tones"]:
-            return "background-color: #e7f1ff; color:#004085;"  # أزرق فاتح
+            return "background-color: #e7f1ff; color:#004085;"
         elif col_name == "Status":
             if "✅" in val:
                 return "background-color:#c3e6cb; color:#155724;"
@@ -247,5 +247,4 @@ if check_free_trial(user_id="default_user") or st.session_state.get("access_gran
     card_num = st.number_input("رقم الماكينة:", min_value=1, step=1)
     current_tons = st.number_input("عدد الأطنان الحالية:", min_value=0, step=100)
     if st.button("عرض الحالة"):
-        check_machine_status(card_num, current_tons, all_sheets)
-
+        check_machine_status(card_num, current_tons, all_sheets)
