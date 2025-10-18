@@ -95,69 +95,55 @@ def render_countdown(trial_start_ts, seconds=60):
 # 🔑 نظام الـ Tokens (معدّل)
 # ===============================
 def check_token():
-    st.subheader("🔐 الدخول / تفعيل رمز تجربة")
-
-    tokens = load_tokens()
-    available_tokens = [t for t, v in tokens.items() if not v.get("used", False)]
-
-    # ⚙ التبديل إلى st.query_params بدلاً من experimental
     params = st.query_params
-    expired = params.get("expired", ["0"])[0] if isinstance(params.get("expired"), list) else params.get("expired", "0")
+    token = params.get("token", [None])[0] if isinstance(params.get("token"), list) else params.get("token")
 
-    # إذا انتهت التجربة المجانية
-    if expired == "1":
-        st.error("⏰ انتهت التجربة المجانية. أدخل كلمة المرور للمتابعة.")
-        password = st.text_input("كلمة المرور:", type="password")
-        if password == "1234":
-            st.success("✅ تم تسجيل الدخول بنجاح (بالباسورد).")
-            st.session_state["access_granted"] = True
-            return True
-        else:
-            st.stop()
+    if not token:
+        st.warning("🚫 لم يتم تمرير رمز (token) في الرابط.")
+        return False
 
-    # لو عنده صلاحية دخول كاملة
-    if st.session_state.get("access_granted", False):
-        if "trial_start" in st.session_state:
-            render_countdown(st.session_state["trial_start"], seconds=60)
-        return True
+    with open("tokens.json", "r", encoding="utf-8") as f:
+        tokens = json.load(f)
 
-    # لو التجربة المجانية شغالة
-    if "trial_start" in st.session_state:
-        elapsed = int(time.time() - st.session_state["trial_start"])
-        if elapsed < 60:
-            render_countdown(st.session_state["trial_start"], seconds=60)
-            st.info("✅ التجربة المجانية مفعّلة — يمكنك استخدام التطبيق حتى انتهاء العداد.")
-            return True
-        else:
-            st.error("⏰ انتهت التجربة المجانية. أدخل كلمة المرور للمتابعة.")
-            password = st.text_input("كلمة المرور:", type="password")
-            if password == "1234":
-                st.success("✅ تم تسجيل الدخول بنجاح.")
-                st.session_state["access_granted"] = True
-                return True
+    # لو الرمز مش موجود
+    if token not in tokens:
+        st.error("❌ هذا الرمز غير صالح أو غير مسموح به.")
+        return False
+
+    token_data = tokens[token]
+    now = datetime.datetime.now()
+
+    # لو تم استخدامه سابقًا
+    if token_data.get("used", False):
+        last_used_str = token_data.get("last_used")
+        if last_used_str:
+            last_used = datetime.datetime.fromisoformat(last_used_str)
+            elapsed = (now - last_used).total_seconds() / 3600  # بالساعات
+
+            if elapsed < 24:
+                remaining = 24 - elapsed
+                st.error(f"⏳ لقد استخدمت التجربة المجانية مؤخرًا. حاول بعد {remaining:.1f} ساعة.")
+                return False
             else:
-                st.stop()
+                # إعادة التفعيل بعد 24 ساعة
+                token_data["used"] = False
 
-    # لو لسه مفيش جلسة نشطة — عرض التوكنات
-    if available_tokens:
-        token = st.selectbox("اختر رمز التجربة المجانية:", available_tokens)
-        if st.button("تفعيل الرمز"):
-            tokens[token]["used"] = True
-            save_tokens(tokens)
-            st.session_state["trial_start"] = time.time()
-            st.success(f"🎁 تم تفعيل الرمز ({token}) — التجربة المجانية بدأت الآن لمدة 60 ثانية ⏳")
-            st.rerun()
-    else:
-        st.warning("🔒 جميع الرموز استخدمت. أدخل كلمة المرور للوصول:")
-        password = st.text_input("كلمة المرور:", type="password")
-        if password == "1234":
-            st.success("✅ تم تسجيل الدخول بنجاح.")
-            st.session_state["access_granted"] = True
-            return True
-        else:
-            st.stop()
+    # تفعيل التجربة
+    st.success(f"🎁 تم تفعيل الرمز ({token}) — التجربة المجانية بدأت الآن لمدة 60 ثانية ⏳")
 
-    return False
+    # تحديث حالة التوكين
+    token_data["used"] = True
+    token_data["last_used"] = now.isoformat()
+    tokens[token] = token_data
+
+    with open("tokens.json", "w", encoding="utf-8") as f:
+        json.dump(tokens, f, indent=2, ensure_ascii=False)
+
+    st.session_state["free_trial_active"] = True
+    st.session_state["trial_start_time"] = now.timestamp()
+    st.session_state["trial_duration"] = 60
+
+    return True
 
 # ===============================
 # ⚙ دالة مقارنة الصيانة
