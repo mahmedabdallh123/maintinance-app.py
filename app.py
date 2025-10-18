@@ -58,8 +58,10 @@ def check_machine_status(card_num, current_tons, all_sheets):
         st.warning("⚠️ لم يتم العثور على شريحة تناسب عدد الأطنان الحالي.")
         return None
 
+    # نستخدم الحدود داخلياً فقط بدون عرضهم في النتيجة
     min_tons = current_slice["Min_Tons"].values[0]
     max_tons = current_slice["Max_Tons"].values[0]
+
     needed_service_raw = current_slice["Service"].values[0]
     needed_parts = split_needed_services(needed_service_raw)
     needed_norm = [normalize_name(p) for p in needed_parts]
@@ -91,8 +93,9 @@ def check_machine_status(card_num, current_tons, all_sheets):
     done_norm = [normalize_name(c) for c in done_services]
     not_done = [orig for orig, n in zip(needed_parts, needed_norm) if n not in done_norm]
 
+    # --- 🧾 النتيجة بدون أعمدة الشريحة ---
     result = {
-        "card": card_num,
+        "Card": card_num,
         "Current_Tons": current_tons,
         "Service Needed": " + ".join(needed_parts) if needed_parts else "-",
         "Done Services": ", ".join(done_services) if done_services else "-",
@@ -100,7 +103,6 @@ def check_machine_status(card_num, current_tons, all_sheets):
         "Date": last_date,
         "Tones": last_tons,
         "Status": status,
-        "Range": f"{min_tons} - {max_tons}"
     }
 
     result_df = pd.DataFrame([result])
