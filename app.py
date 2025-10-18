@@ -95,6 +95,7 @@ def render_countdown(trial_start_ts, seconds=60):
 # 🔑 نظام الـ Tokens (معدّل)
 # ===============================
 def check_token():
+<<<<<<< HEAD
     st.subheader("🔐 الدخول / تفعيل رمز تجربة")
 
     tokens = load_tokens()
@@ -158,6 +159,57 @@ def check_token():
             st.stop()
 
     return False
+=======
+    params = st.query_params
+    token = params.get("token", [None])[0] if isinstance(params.get("token"), list) else params.get("token")
+
+    if not token:
+        st.warning("🚫 لم يتم تمرير رمز (token) في الرابط.")
+        return False
+
+    with open("tokens.json", "r", encoding="utf-8") as f:
+        tokens = json.load(f)
+
+    # لو الرمز مش موجود
+    if token not in tokens:
+        st.error("❌ هذا الرمز غير صالح أو غير مسموح به.")
+        return False
+
+    token_data = tokens[token]
+    now = datetime.datetime.now()
+
+    # لو تم استخدامه سابقًا
+    if token_data.get("used", False):
+        last_used_str = token_data.get("last_used")
+        if last_used_str:
+            last_used = datetime.datetime.fromisoformat(last_used_str)
+            elapsed = (now - last_used).total_seconds() / 3600  # بالساعات
+
+            if elapsed < 24:
+                remaining = 24 - elapsed
+                st.error(f"⏳ لقد استخدمت التجربة المجانية مؤخرًا. حاول بعد {remaining:.1f} ساعة.")
+                return False
+            else:
+                # إعادة التفعيل بعد 24 ساعة
+                token_data["used"] = False
+
+    # تفعيل التجربة
+    st.success(f"🎁 تم تفعيل الرمز ({token}) — التجربة المجانية بدأت الآن لمدة 60 ثانية ⏳")
+
+    # تحديث حالة التوكين
+    token_data["used"] = True
+    token_data["last_used"] = now.isoformat()
+    tokens[token] = token_data
+
+    with open("tokens.json", "w", encoding="utf-8") as f:
+        json.dump(tokens, f, indent=2, ensure_ascii=False)
+
+    st.session_state["free_trial_active"] = True
+    st.session_state["trial_start_time"] = now.timestamp()
+    st.session_state["trial_duration"] = 60
+
+    return True
+>>>>>>> c17658bb48e335f411cc4700f778cc2496f077b5
 
 # ===============================
 # ⚙ دالة مقارنة الصيانة
