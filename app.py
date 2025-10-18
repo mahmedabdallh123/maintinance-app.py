@@ -33,7 +33,7 @@ def split_needed_services(needed_service_str):
     return [p.strip() for p in parts if p.strip() != ""]
 
 # ===============================
-# ⚙️ دالة مقارنة الصيانة
+# ⚙ دالة مقارنة الصيانة
 # ===============================
 def check_machine_status(card_num, current_tons, all_sheets):
     if "ServicePlan" not in all_sheets or "Machine" not in all_sheets:
@@ -43,7 +43,7 @@ def check_machine_status(card_num, current_tons, all_sheets):
     service_plan_df = all_sheets["ServicePlan"]
     card_sheet_name = f"Card{card_num}"
     if card_sheet_name not in all_sheets:
-        st.warning(f"⚠️ لا يوجد شيت باسم {card_sheet_name}")
+        st.warning(f"⚠ لا يوجد شيت باسم {card_sheet_name}")
         return None
 
     card_df = all_sheets[card_sheet_name]
@@ -55,10 +55,9 @@ def check_machine_status(card_num, current_tons, all_sheets):
     ]
 
     if current_slice.empty:
-        st.warning("⚠️ لم يتم العثور على شريحة تناسب عدد الأطنان الحالي.")
+        st.warning("⚠ لم يتم العثور على شريحة تناسب عدد الأطنان الحالي.")
         return None
 
-    # حدود الشريحة (نستخدمها فقط داخلياً)
     min_tons = current_slice["Min_Tons"].values[0]
     max_tons = current_slice["Max_Tons"].values[0]
 
@@ -81,11 +80,9 @@ def check_machine_status(card_num, current_tons, all_sheets):
         last_date = last_row.get("Date", "-")
         last_tons = last_row.get("Tones", "-")
 
-        # الأعمدة اللي نتجاهلها تماماً
-        ignore_cols = ["card", "Tones", "Date", "Current_Tons", 
+        ignore_cols = ["card", "Tones", "Date", "Current_Tons",
                        "Service Needed", "Min_Tons", "Max_Tons"]
 
-        # نمر فقط على الأعمدة الباقية
         for col in card_df.columns:
             if col not in ignore_cols:
                 val = str(last_row.get(col, "")).strip().lower()
@@ -111,12 +108,26 @@ def check_machine_status(card_num, current_tons, all_sheets):
     }
 
     result_df = pd.DataFrame([result])
-    st.dataframe(result_df, use_container_width=True)
+
+    # 🎨 تلوين الجدول حسب الأعمدة
+    def highlight_columns(val, col_name, status):
+        if col_name == "Done Services" or ("تم تنفيذ" in status and col_name == "Status"):
+            return "background-color: #d4edda; color: #155724; font-weight: bold;"  # أخضر فاتح
+        elif col_name == "Not Done Services" or ("لم يتم" in status and col_name == "Status"):
+            return "background-color: #f8d7da; color: #721c24; font-weight: bold;"  # أحمر فاتح
+        else:
+            return ""
+
+    def style_table(row):
+        return [highlight_columns(row[col], col, row["Status"]) for col in row.index]
+
+    styled_df = result_df.style.apply(style_table, axis=1)
+    st.dataframe(styled_df, use_container_width=True)
     return result_df
 
 
 # ===============================
-# 🖥️ واجهة Streamlit
+# 🖥 واجهة Streamlit
 # ===============================
 st.title("🔧 نظام متابعة الصيانة التنبؤية")
 st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
