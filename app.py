@@ -18,17 +18,30 @@ def load_all_sheets():
         st.stop()
 
 # ===============================
-# 🔑 نظام الـ Tokens مع عداد التجربة
+# 🔠 دوال مساعدة
 # ===============================
-import streamlit as st
-import time
-import json
-import os
-import streamlit.components.v1 as components
+def normalize_name(s):
+    if s is None:
+        return ""
+    s = str(s)
+    s = s.replace("\n", "+")
+    s = re.sub(r"👦.*?👦", "", s)
+    s = re.sub(r"[^0-9a-zA-Z\u0600-\u06FF\+\s_/.-]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip().lower()
+    return s
 
+def split_needed_services(needed_service_str):
+    if not isinstance(needed_service_str, str) or needed_service_str.strip() == "":
+        return []
+    parts = re.split(r"\+|,|\n|;", needed_service_str)
+    return [p.strip() for p in parts if p.strip() != ""]
+
+# ===============================
+# 🔑 نظام التجربة المجانية 60 ثانية + إعادة التفعيل بعد 24 ساعة
+# ===============================
 TOKENS_FILE = "tokens.json"
-TRIAL_SECONDS = 60         # مدة التجربة 60 ثانية
-RENEW_HOURS = 24           # مدة الانتظار قبل إعادة التجربة
+TRIAL_SECONDS = 60
+RENEW_HOURS = 24
 
 def load_tokens():
     if not os.path.exists(TOKENS_FILE):
@@ -72,7 +85,6 @@ def check_free_trial(user_id="default_user"):
     tokens = load_tokens()
     now_ts = int(time.time())
 
-    # إذا المستخدم جديد، أضف له سجل
     if user_id not in tokens:
         tokens[user_id] = {"last_trial": 0}
         save_tokens(tokens)
@@ -105,7 +117,10 @@ def check_free_trial(user_id="default_user"):
     remaining_hours = max(0, 24 - hours_since_last)
     st.warning(f"🔒 انتهت التجربة المجانية. يمكنك المحاولة مرة أخرى بعد {remaining_hours:.1f} ساعة")
     return False
+
+# ===============================
 # ⚙ دالة مقارنة الصيانة
+# ===============================
 def check_machine_status(card_num, current_tons, all_sheets):
     if "ServicePlan" not in all_sheets or "Machine" not in all_sheets:
         st.error("❌ الملف لازم يحتوي على شيتين: 'Machine' و 'ServicePlan'")
@@ -175,13 +190,13 @@ def check_machine_status(card_num, current_tons, all_sheets):
     # 🎨 تلوين الأعمدة
     def highlight_cell(val, col_name):
         if col_name == "Service Needed":
-            return "background-color: #fff3cd; color:#856404; font-weight:bold;"  # أصفر
+            return "background-color: #fff3cd; color:#856404; font-weight:bold;"
         elif col_name == "Done Services":
-            return "background-color: #d4edda; color:#155724; font-weight:bold;"  # أخضر
+            return "background-color: #d4edda; color:#155724; font-weight:bold;"
         elif col_name == "Not Done Services":
-            return "background-color: #f8d7da; color:#721c24; font-weight:bold;"  # أحمر
+            return "background-color: #f8d7da; color:#721c24; font-weight:bold;"
         elif col_name in ["Date", "Tones"]:
-            return "background-color: #e7f1ff; color:#004085;"  # أزرق فاتح
+            return "background-color: #e7f1ff; color:#004085;"
         elif col_name == "Status":
             if "✅" in val:
                 return "background-color:#c3e6cb; color:#155724;"
@@ -205,7 +220,7 @@ def check_machine_status(card_num, current_tons, all_sheets):
 # ===============================
 st.title("🔧 نظام متابعة الصيانة التنبؤية")
 
-if check_token():
+if check_free_trial(user_id="default_user"):
     all_sheets = load_all_sheets()
     st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
     card_num = st.number_input("رقم الماكينة:", min_value=1, step=1)
