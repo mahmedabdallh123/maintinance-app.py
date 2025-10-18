@@ -18,11 +18,11 @@ def load_all_sheets():
         st.stop()
 
 # ===============================
-# 🔧 إعداد تجربة مجانية 60 ثانية مع إعادة تفعيل كل 24 ساعة
+# 🔑 إعدادات التجربة المجانية
 # ===============================
 TOKENS_FILE = "tokens.json"
-TRIAL_SECONDS = 60     # مدة التجربة 60 ثانية
-RENEW_HOURS = 24       # إعادة التجربة بعد 24 ساعة
+TRIAL_SECONDS = 60   # مدة التجربة بالثواني
+RENEW_HOURS = 24     # فترة انتظار قبل إعادة التجربة
 
 def load_tokens():
     if not os.path.exists(TOKENS_FILE):
@@ -35,6 +35,9 @@ def save_tokens(tokens):
     with open(TOKENS_FILE, "w") as f:
         json.dump(tokens, f, indent=4, ensure_ascii=False)
 
+# ===============================
+# 🧩 عداد HTML/JS للتجربة
+# ===============================
 def render_countdown(start_ts, seconds=TRIAL_SECONDS):
     html = f"""
     <div id="countdown" style="font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif; margin-top:10px;">
@@ -62,6 +65,9 @@ def render_countdown(start_ts, seconds=TRIAL_SECONDS):
     """
     components.html(html, height=120)
 
+# ===============================
+# 🔑 دالة التحقق من التجربة المجانية
+# ===============================
 def check_free_trial(user_id="default_user"):
     if "trial_start" not in st.session_state:
         st.session_state["trial_start"] = 0
@@ -69,7 +75,6 @@ def check_free_trial(user_id="default_user"):
     tokens = load_tokens()
     now_ts = int(time.time())
 
-    # إذا المستخدم جديد، أضف له سجل
     if user_id not in tokens:
         tokens[user_id] = {"last_trial": 0}
         save_tokens(tokens)
@@ -77,7 +82,15 @@ def check_free_trial(user_id="default_user"):
     last_trial = tokens[user_id]["last_trial"]
     hours_since_last = (now_ts - last_trial) / 3600
 
-    # إذا التجربة بدأت مسبقًا ولم تنتهِ
+    # إذا مرت 24 ساعة، يمكن إعادة التجربة
+    if hours_since_last >= RENEW_HOURS:
+        if st.button("تفعيل التجربة المجانية 60 ثانية"):
+            st.session_state["trial_start"] = now_ts
+            tokens[user_id]["last_trial"] = now_ts
+            save_tokens(tokens)
+            st.success("🎁 تم تفعيل التجربة المجانية لمدة 60 ثانية ⏳")
+
+    # عرض العداد إذا التجربة بدأت
     if st.session_state["trial_start"]:
         elapsed = now_ts - st.session_state["trial_start"]
         if elapsed < TRIAL_SECONDS:
@@ -88,30 +101,19 @@ def check_free_trial(user_id="default_user"):
             st.warning("⏰ انتهت التجربة المجانية. يمكنك إعادة التجربة بعد مرور 24 ساعة من آخر مرة.")
             return False
 
-    # إذا مرّت 24 ساعة منذ آخر تجربة
-    if hours_since_last >= RENEW_HOURS:
-        if st.button("تفعيل التجربة المجانية 60 ثانية"):
-            st.session_state["trial_start"] = now_ts
-            tokens[user_id]["last_trial"] = now_ts
-            save_tokens(tokens)
-            st.success(f"🎁 تم تفعيل التجربة المجانية لمدة {TRIAL_SECONDS} ثانية ⏳")
-            st.experimental_rerun()
+    if not st.session_state["trial_start"]:
+        remaining_hours = max(0, 24 - hours_since_last)
+        st.warning(f"🔒 انتهت التجربة المجانية. يمكنك المحاولة مرة أخرى بعد {remaining_hours:.1f} ساعة")
         return False
 
-    # إذا لم تنتهِ الـ 24 ساعة بعد
-    remaining_hours = max(0, 24 - hours_since_last)
-    st.warning(f"🔒 انتهت التجربة المجانية. يمكنك المحاولة مرة أخرى بعد {remaining_hours:.1f} ساعة")
-    return False
-
 # ===============================
-# 🔠 دوال مساعدة
+# 🔠 دوال مساعدة لمعالجة البيانات
 # ===============================
 def normalize_name(s):
     if s is None:
         return ""
     s = str(s)
     s = s.replace("\n", "+")
-    s = re.sub(r"👦.*?👦", "", s)
     s = re.sub(r"[^0-9a-zA-Z\u0600-\u06FF\+\s_/.-]", " ", s)
     s = re.sub(r"\s+", " ", s).strip().lower()
     return s
