@@ -20,8 +20,15 @@ def load_all_sheets():
 # ===============================
 # 🔑 نظام الـ Tokens مع عداد التجربة
 # ===============================
+import streamlit as st
+import time
+import json
+import os
+import streamlit.components.v1 as components
+
 TOKENS_FILE = "tokens.json"
-TRIAL_DURATION = 24 * 3600  # 24 ساعة بالثواني
+TRIAL_SECONDS = 60         # مدة التجربة 60 ثانية
+RENEW_HOURS = 24           # مدة الانتظار قبل إعادة التجربة
 
 def load_tokens():
     if not os.path.exists(TOKENS_FILE):
@@ -34,10 +41,7 @@ def save_tokens(tokens):
     with open(TOKENS_FILE, "w") as f:
         json.dump(tokens, f, indent=4, ensure_ascii=False)
 
-# ===============================
-# 🧩 دالة عرض العداد (HTML/JS)
-# ===============================
-def render_countdown(trial_start_ts, seconds=TRIAL_DURATION):
+def render_countdown(start_ts, seconds=TRIAL_SECONDS):
     html = f"""
     <div id="countdown" style="font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif; margin-top:10px;">
       <h4>⏳ التجربة المجانية متبقي: <span id='secs'>--</span> ثانية</h4>
@@ -47,7 +51,7 @@ def render_countdown(trial_start_ts, seconds=TRIAL_DURATION):
     </div>
 
     <script>
-    const start_ts = {int(trial_start_ts)} * 1000;
+    const start_ts = {int(start_ts)} * 1000;
     const total = {int(seconds)};
     function update(){{
       const now = Date.now();
@@ -64,83 +68,43 @@ def render_countdown(trial_start_ts, seconds=TRIAL_DURATION):
     """
     components.html(html, height=120)
 
-# ===============================
-# 🔑 نظام الـ Tokens المحسّن
-# ===============================
-def check_token():
-    st.subheader("🔐 الدخول / تفعيل رمز تجربة")
-
+def check_free_trial(user_id="default_user"):
     tokens = load_tokens()
-    available_tokens = []
-
     now_ts = int(time.time())
 
-    # تحقق من صلاحية كل توكن
-    for t, v in tokens.items():
-        trial_start = v.get("trial_start", 0)
-        if not v.get("used", False) or now_ts - trial_start >= TRIAL_DURATION:
-            available_tokens.append(t)
+    # إذا المستخدم جديد، أضف له سجل
+    if user_id not in tokens:
+        tokens[user_id] = {"last_trial": 0}
+        save_tokens(tokens)
 
-    params = st.query_params
-    expired = params.get("expired", ["0"])[0] if isinstance(params.get("expired"), list) else params.get("expired", "0")
+    last_trial = tokens[user_id]["last_trial"]
+    hours_since_last = (now_ts - last_trial) / 3600
 
-    # كلمة مرور بديلة
-    PASSWORD = "1234"
-
-    # إذا انتهت التجربة المجانية
-    if expired == "1":
-        st.error("⏰ انتهت التجربة المجانية. أدخل كلمة المرور للمتابعة.")
-        password = st.text_input("كلمة المرور:", type="password")
-        if password == PASSWORD:
-            st.success("✅ تم تسجيل الدخول بنجاح (بالباسورد).")
-            st.session_state["access_granted"] = True
-            return True
-        else:
-            st.stop()
-
-    # لو عنده صلاحية دخول كاملة
-    if st.session_state.get("access_granted", False):
-        return True
-
-    # اختيار توكن متاح
-    if available_tokens:
-        token = st.selectbox("اختر رمز التجربة المجانية:", available_tokens)
-        if st.button("تفعيل الرمز"):
-            tokens[token]["used"] = True
-            tokens[token]["trial_start"] = now_ts
+    # إذا مرّت 24 ساعة، يمكن إعادة التجربة
+    if hours_since_last >= RENEW_HOURS:
+        if st.button("تفعيل التجربة المجانية 60 ثانية"):
+            tokens[user_id]["last_trial"] = now_ts
             save_tokens(tokens)
             st.session_state["trial_start"] = now_ts
-            st.success(f"🎁 تم تفعيل الرمز ({token}) — التجربة المجانية بدأت الآن لمدة 24 ساعة ⏳")
-            st.rerun()
-    else:
-        st.warning("🔒 جميع الرموز مستخدمة خلال الـ 24 ساعة الأخيرة. أدخل كلمة المرور للوصول:")
-        password = st.text_input("كلمة المرور:", type="password")
-        if password == PASSWORD:
-            st.success("✅ تم تسجيل الدخول بنجاح.")
-            st.session_state["access_granted"] = True
-            return True
-        else:
-            st.stop()
+            st.success("🎁 تم تفعيل التجربة المجانية لمدة 60 ثانية ⏳")
+            st.experimental_rerun()
+        return False
 
-    # إذا بدأ التجربة سابقًا
+    # إذا التجربة بدأت مسبقًا
     if "trial_start" in st.session_state:
         elapsed = now_ts - st.session_state["trial_start"]
-        if elapsed < TRIAL_DURATION:
-            render_countdown(st.session_state["trial_start"], seconds=TRIAL_DURATION)
-            st.info("✅ التجربة المجانية مفعّلة — يمكنك استخدام التطبيق حتى انتهاء العداد.")
+        if elapsed < TRIAL_SECONDS:
+            render_countdown(st.session_state["trial_start"], TRIAL_SECONDS)
+            st.info("✅ التجربة المجانية مفعّلة — استخدم التطبيق الآن")
             return True
         else:
-            st.error("⏰ انتهت التجربة المجانية. أدخل كلمة المرور للمتابعة.")
-            password = st.text_input("كلمة المرور:", type="password")
-            if password == PASSWORD:
-                st.success("✅ تم تسجيل الدخول بنجاح.")
-                st.session_state["access_granted"] = True
-                return True
-            else:
-                st.stop()
+            st.warning("⏰ انتهت التجربة المجانية. يمكنك إعادة التجربة بعد مرور 24 ساعة من آخر مرة.")
+            return False
 
+    # إذا لم يبدأ المستخدم التجربة اليوم
+    remaining_hours = max(0, 24 - hours_since_last)
+    st.warning(f"🔒 انتهت التجربة المجانية. يمكنك المحاولة مرة أخرى بعد {remaining_hours:.1f} ساعة")
     return False
-
 # ⚙ دالة مقارنة الصيانة
 def check_machine_status(card_num, current_tons, all_sheets):
     if "ServicePlan" not in all_sheets or "Machine" not in all_sheets:
