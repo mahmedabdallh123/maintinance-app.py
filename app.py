@@ -239,7 +239,7 @@ def check_machine_status(card_num, current_tons, all_sheets):
 # ===============================
 # 🖥 واجهة Streamlit
 # ===============================
-st.title("🔧 نظام متابعة الصيانة التنبؤية")
+st.title("🔧 نظام متابعة الصيانة التنبؤية لتحضيرات بيل يارن1")
 
 if check_free_trial(user_id="default_user") or st.session_state.get("access_granted", False):
     all_sheets = load_all_sheets()
