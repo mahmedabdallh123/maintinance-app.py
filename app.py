@@ -1,18 +1,21 @@
+import streamlit as st
 import pandas as pd
 import re
-from IPython.display import display, HTML
 
 # ===============================
-# 🔹 مسار الملف
+# 📂 تحميل البيانات من الإكسيل
 # ===============================
-file_path = r"C:\Users\LAP ME\Desktop\داتا ساينس دبلومه\new projects\maintinance plan\Machine_Service_Lookup.xlsx"
-
-# ===============================
-# 🔹 دوال مساعدة
-# ===============================
+@st.cache_data
 def load_all_sheets():
-    return pd.read_excel(file_path, sheet_name=None)
+    try:
+        return pd.read_excel("Machine_Service_Lookup.xlsx", sheet_name=None)
+    except FileNotFoundError:
+        st.error("❌ لم يتم العثور على الملف Machine_Service_Lookup.xlsx في نفس المجلد.")
+        st.stop()
 
+# ===============================
+# 🔠 دوال مساعدة
+# ===============================
 def normalize_name(s):
     if s is None:
         return ""
@@ -30,21 +33,24 @@ def split_needed_services(needed_service_str):
     return [p.strip() for p in parts if p.strip() != ""]
 
 # ===============================
-# 🔹 دالة فحص الماكينة المحددة
+# ⚙️ دالة فحص حالة الماكينة
 # ===============================
 def check_machine_status(card_num, current_tons, all_sheets):
+    if "ServicePlan" not in all_sheets or "Machine" not in all_sheets:
+        st.error("❌ يجب أن يحتوي الملف على شيتين باسم 'Machine' و 'ServicePlan'")
+        return None
+
     service_plan_df = all_sheets["ServicePlan"]
     machine_df = all_sheets["Machine"]
 
-    # تحديد اسم الشيت الخاص بالماكينة
     card_sheet_name = f"Card{card_num}"
     if card_sheet_name not in all_sheets:
-        print(f"❌ لا يوجد شيت باسم '{card_sheet_name}' في الملف.")
+        st.warning(f"⚠️ لا يوجد شيت باسم {card_sheet_name}")
         return None
 
     card_df = all_sheets[card_sheet_name]
 
-    # استخراج الخدمة المطلوبة من ServicePlan
+    # تحديد الخدمة المطلوبة من الخطة
     service_row = service_plan_df[
         (service_plan_df["Min_Tons"] <= current_tons) &
         (service_plan_df["Max_Tons"] >= current_tons)
@@ -53,15 +59,13 @@ def check_machine_status(card_num, current_tons, all_sheets):
     needed_parts = split_needed_services(needed_service_raw)
     needed_norm = [normalize_name(p) for p in needed_parts]
 
-    # البحث عن الصيانة المنفذة في شيت الكارد
+    # التحقق من الخدمات المنفذة
     service_done = card_df[
-        (card_df["card"] == card_num) &
-        (card_df["Min_Tons"] <= current_tons) &
-        (card_df["Max_Tons"] >= current_tons)
+        (card_df["card"] == card_num)
     ]
 
     done_services_cols, last_date, last_tons = [], "-", "-"
-    status = "لم يتم تنفيذ صيانة"
+    status = "❌ لم يتم تنفيذ صيانة"
 
     if not service_done.empty:
         last_row = service_done.iloc[-1]
@@ -73,7 +77,7 @@ def check_machine_status(card_num, current_tons, all_sheets):
             if val and val not in ["nan", "none"]:
                 done_services_cols.append(col)
         if done_services_cols:
-            status = "تم تنفيذ الصيانة"
+            status = "✅ تم تنفيذ صيانة"
 
     done_norm = [normalize_name(c) for c in done_services_cols]
     not_done = [orig for orig, n in zip(needed_parts, needed_norm) if n not in done_norm]
@@ -89,56 +93,19 @@ def check_machine_status(card_num, current_tons, all_sheets):
         "Tones": last_tons
     }
 
-    # تحديث الجدول Machine بنفس النتيجة
-    idx = machine_df.index[machine_df["card"] == card_num]
-    if not idx.empty:
-        i = idx[0]
-        for k, v in result.items():
-            if k in machine_df.columns:
-                machine_df.at[i, k] = v
-            else:
-                machine_df[k] = ""
-                machine_df.at[i, k] = v
-
-    # حفظ التحديث في نفس الملف
-    with pd.ExcelWriter(file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-        machine_df.to_excel(writer, sheet_name="Machine", index=False)
-        service_plan_df.to_excel(writer, sheet_name="ServicePlan", index=False)
-        for sheet_name, df in all_sheets.items():
-            if sheet_name.startswith("Card"):
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
-
-    # عرض النتيجة في جدول
     result_df = pd.DataFrame([result])
-    styled = result_df.style.set_properties(**{'background-color': '#f9fcff', 'border': '1px solid #ccc'})
-    display(HTML(f"<h3>🔧 نتيجة فحص الماكينة رقم {card_num}</h3>"))
-    display(styled)
+    st.dataframe(result_df, use_container_width=True)
     return result_df
 
+# ===============================
+# 🖥️ واجهة Streamlit
+# ===============================
+st.title("🔧 نظام متابعة الصيانة التنبؤية")
+st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
 
-# ===============================
-# 🔹 تشغيل تفاعلي
-# ===============================
 all_sheets = load_all_sheets()
-print("✅ تم تحميل البيانات بنجاح.\n")
+card_num = st.number_input("رقم الماكينة:", min_value=1, step=1)
+current_tons = st.number_input("عدد الأطنان الحالية:", min_value=0, step=100)
 
-try:
-    card_num = int(input("أدخل رقم الماكينة (مثل 1 أو 2 أو 3): "))
-    current_tons = float(input("أدخل عدد الأطنان الحالية: "))
+if st.button("عرض الحالة"):
     check_machine_status(card_num, current_tons, all_sheets)
-except Exception as e:
-    print("⚠️ حدث خطأ:", e)
-
-
-# 🖥 واجهة Streamlit
-st.title("🧰 نظام متابعة الصيانة")
-st.write("اختار رقم الماكينة وعدد الأطنان للتحقق من حالة الصيانة")
-
-card_num = st.number_input("أدخل رقم الماكينة:", min_value=1, step=1)
-current_tons = st.number_input("أدخل عدد الأطنان الحالية:", min_value=0.0, step=1.0)
-
-if st.button("تحقق"):
-    df = check_maintenance_status(card_num, current_tons)
-    if not df.empty:
-        st.dataframe(df.style.set_properties(**{'background-color': '#f0f9ff', 'border': '1px solid #ccc'}))
-
