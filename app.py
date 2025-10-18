@@ -61,7 +61,7 @@ def render_countdown(trial_start_ts, seconds=60):
     """
     html = f"""
     <div id="countdown" style="font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif;">
-      <h4>⏳ التجربة المجانية متبقي: <span id="secs'>--</span> ثانية</h4>
+      <h4>⏳ التجربة المجانية متبقي: <span id='secs'>--</span> ثانية</h4>
       <div style="width:100%; background:#eee; border-radius:6px; height:12px; margin-top:6px;">
         <div id="bar" style="height:12px; width:0%; background:#4caf50; border-radius:6px;"></div>
       </div>
@@ -70,7 +70,7 @@ def render_countdown(trial_start_ts, seconds=60):
     <script>
     const start_ts = {int(trial_start_ts)} * 1000; // ms
     const total = {int(seconds)}; // seconds
-    function update(){
+    function update(){{
       const now = Date.now();
       let elapsed = Math.floor((now - start_ts)/1000);
       if(elapsed < 0) elapsed = 0;
@@ -79,20 +79,18 @@ def render_countdown(trial_start_ts, seconds=60):
       document.getElementById('secs').innerText = remaining;
       const pct = Math.max(0, Math.min(100, ((total - remaining) / total) * 100));
       document.getElementById('bar').style.width = pct + '%';
-      if(remaining <= 0){
+      if(remaining <= 0){{
         const url = new URL(window.location.href);
         url.searchParams.set('expired', '1');
         window.location.href = url.toString();
-      } else {
+      }} else {{
         setTimeout(update, 1000);
-      }
-    }
+      }}
+    }}
     update();
     </script>
     """
-    # height small enough to show content
-    components.html(html, height=90)
-
+    components.html(html, height=100)
 
 # ===============================
 # 🔑 نظام الـ Tokens (معدّل ليعرض العداد ويترك التفاعل شغّال)
