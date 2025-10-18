@@ -18,11 +18,31 @@ def load_all_sheets():
         st.stop()
 
 # ===============================
-# 🔑 إعدادات التجربة المجانية
+# 🔠 دوال مساعدة
+# ===============================
+def normalize_name(s):
+    if s is None:
+        return ""
+    s = str(s)
+    s = s.replace("\n", "+")
+    s = re.sub(r"👦.*?👦", "", s)
+    s = re.sub(r"[^0-9a-zA-Z\u0600-\u06FF\+\s_/.-]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip().lower()
+    return s
+
+def split_needed_services(needed_service_str):
+    if not isinstance(needed_service_str, str) or needed_service_str.strip() == "":
+        return []
+    parts = re.split(r"\+|,|\n|;", needed_service_str)
+    return [p.strip() for p in parts if p.strip() != ""]
+
+# ===============================
+# 🔑 نظام التجربة المجانية + كلمة المرور
 # ===============================
 TOKENS_FILE = "tokens.json"
-TRIAL_SECONDS = 60   # مدة التجربة بالثواني
-RENEW_HOURS = 24     # فترة انتظار قبل إعادة التجربة
+TRIAL_SECONDS = 60     # مدة التجربة 60 ثانية
+RENEW_HOURS = 24       # إعادة التجربة كل 24 ساعة
+PASSWORD = "1234"      # كلمة المرور لمتابعة بعد التجربة
 
 def load_tokens():
     if not os.path.exists(TOKENS_FILE):
@@ -35,9 +55,6 @@ def save_tokens(tokens):
     with open(TOKENS_FILE, "w") as f:
         json.dump(tokens, f, indent=4, ensure_ascii=False)
 
-# ===============================
-# 🧩 عداد HTML/JS للتجربة
-# ===============================
 def render_countdown(start_ts, seconds=TRIAL_SECONDS):
     html = f"""
     <div id="countdown" style="font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif; margin-top:10px;">
@@ -65,13 +82,7 @@ def render_countdown(start_ts, seconds=TRIAL_SECONDS):
     """
     components.html(html, height=120)
 
-# ===============================
-# 🔑 دالة التحقق من التجربة المجانية
-# ===============================
 def check_free_trial(user_id="default_user"):
-    if "trial_start" not in st.session_state:
-        st.session_state["trial_start"] = 0
-
     tokens = load_tokens()
     now_ts = int(time.time())
 
@@ -82,47 +93,39 @@ def check_free_trial(user_id="default_user"):
     last_trial = tokens[user_id]["last_trial"]
     hours_since_last = (now_ts - last_trial) / 3600
 
-    # إذا مرت 24 ساعة، يمكن إعادة التجربة
+    # إذا مرّت 24 ساعة، يمكن إعادة التجربة
     if hours_since_last >= RENEW_HOURS:
         if st.button("تفعيل التجربة المجانية 60 ثانية"):
             st.session_state["trial_start"] = now_ts
             tokens[user_id]["last_trial"] = now_ts
             save_tokens(tokens)
             st.success("🎁 تم تفعيل التجربة المجانية لمدة 60 ثانية ⏳")
+            st.experimental_rerun()
 
-    # عرض العداد إذا التجربة بدأت
-    if st.session_state["trial_start"]:
+    # إذا التجربة بدأت
+    if "trial_start" in st.session_state and st.session_state["trial_start"]:
         elapsed = now_ts - st.session_state["trial_start"]
         if elapsed < TRIAL_SECONDS:
             render_countdown(st.session_state["trial_start"], TRIAL_SECONDS)
             st.info("✅ التجربة المجانية مفعّلة — استخدم التطبيق الآن")
             return True
         else:
-            st.warning("⏰ انتهت التجربة المجانية. يمكنك إعادة التجربة بعد مرور 24 ساعة من آخر مرة.")
+            st.warning("⏰ انتهت التجربة المجانية. يمكنك استخدام التطبيق بالكلمة السرية.")
+            password = st.text_input("🔑 أدخل كلمة المرور للمتابعة:", type="password")
+            if password == PASSWORD:
+                st.success("✅ تم قبول كلمة المرور، يمكنك متابعة التطبيق")
+                return True
             return False
 
-    if not st.session_state["trial_start"]:
-        remaining_hours = max(0, 24 - hours_since_last)
-        st.warning(f"🔒 انتهت التجربة المجانية. يمكنك المحاولة مرة أخرى بعد {remaining_hours:.1f} ساعة")
-        return False
+    # إذا لم يبدأ المستخدم التجربة اليوم
+    remaining_hours = max(0, 24 - hours_since_last)
+    st.warning(f"🔒 انتهت التجربة المجانية. يمكنك المحاولة مرة أخرى بعد {remaining_hours:.1f} ساعة أو باستخدام كلمة المرور.")
+    password = st.text_input("🔑 أدخل كلمة المرور للمتابعة:", type="password")
+    if password == PASSWORD:
+        st.success("✅ تم قبول كلمة المرور، يمكنك متابعة التطبيق")
+        return True
 
-# ===============================
-# 🔠 دوال مساعدة لمعالجة البيانات
-# ===============================
-def normalize_name(s):
-    if s is None:
-        return ""
-    s = str(s)
-    s = s.replace("\n", "+")
-    s = re.sub(r"[^0-9a-zA-Z\u0600-\u06FF\+\s_/.-]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip().lower()
-    return s
-
-def split_needed_services(needed_service_str):
-    if not isinstance(needed_service_str, str) or needed_service_str.strip() == "":
-        return []
-    parts = re.split(r"\+|,|\n|;", needed_service_str)
-    return [p.strip() for p in parts if p.strip() != ""]
+    return False
 
 # ===============================
 # ⚙ دالة مقارنة الصيانة
