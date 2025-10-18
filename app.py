@@ -106,3 +106,16 @@ def check_machine_status(card_num, current_tons, all_sheets):
     result_df = pd.DataFrame([result])
     st.dataframe(result_df, use_container_width=True)
     return result_df
+
+    # 🖥️ واجهة Streamlit
+    # ===============================
+    st.title("🔧 نظام متابعة الصيانة التنبؤية")
+    st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
+
+    all_sheets = load_all_sheets()
+    card_num = st.number_input("رقم الماكينة:", min_value=1, step=1)
+    current_tons = st.number_input("عدد الأطنان الحالية:", min_value=0, step=100)
+
+    if st.button("عرض الحالة"):
+    check_machine_status(card_num, current_tons, all_sheets)
+ 
