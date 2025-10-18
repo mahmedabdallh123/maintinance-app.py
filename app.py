@@ -18,30 +18,11 @@ def load_all_sheets():
         st.stop()
 
 # ===============================
-# 🔠 دوال مساعدة
-# ===============================
-def normalize_name(s):
-    if s is None:
-        return ""
-    s = str(s)
-    s = s.replace("\n", "+")
-    s = re.sub(r"👦.*?👦", "", s)
-    s = re.sub(r"[^0-9a-zA-Z\u0600-\u06FF\+\s_/.-]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip().lower()
-    return s
-
-def split_needed_services(needed_service_str):
-    if not isinstance(needed_service_str, str) or needed_service_str.strip() == "":
-        return []
-    parts = re.split(r"\+|,|\n|;", needed_service_str)
-    return [p.strip() for p in parts if p.strip() != ""]
-
-# ===============================
-# 🔑 نظام التجربة المجانية 60 ثانية + إعادة التفعيل بعد 24 ساعة
+# 🔑 نظام تجربة مجانية 60 ثانية + تجديد كل 24 ساعة
 # ===============================
 TOKENS_FILE = "tokens.json"
-TRIAL_SECONDS = 60
-RENEW_HOURS = 24
+TRIAL_SECONDS = 60        # مدة التجربة 60 ثانية
+RENEW_HOURS = 24          # فترة الانتظار قبل إعادة التجربة
 
 def load_tokens():
     if not os.path.exists(TOKENS_FILE):
@@ -85,6 +66,7 @@ def check_free_trial(user_id="default_user"):
     tokens = load_tokens()
     now_ts = int(time.time())
 
+    # سجل جديد للمستخدم إذا لم يكن موجود
     if user_id not in tokens:
         tokens[user_id] = {"last_trial": 0}
         save_tokens(tokens)
@@ -92,7 +74,7 @@ def check_free_trial(user_id="default_user"):
     last_trial = tokens[user_id]["last_trial"]
     hours_since_last = (now_ts - last_trial) / 3600
 
-    # إذا مرّت 24 ساعة، يمكن إعادة التجربة
+    # إعادة التجربة بعد 24 ساعة
     if hours_since_last >= RENEW_HOURS:
         if st.button("تفعيل التجربة المجانية 60 ثانية"):
             tokens[user_id]["last_trial"] = now_ts
@@ -102,7 +84,7 @@ def check_free_trial(user_id="default_user"):
             st.experimental_rerun()
         return False
 
-    # إذا التجربة بدأت مسبقًا
+    # التجربة الحالية
     if "trial_start" in st.session_state:
         elapsed = now_ts - st.session_state["trial_start"]
         if elapsed < TRIAL_SECONDS:
@@ -113,10 +95,28 @@ def check_free_trial(user_id="default_user"):
             st.warning("⏰ انتهت التجربة المجانية. يمكنك إعادة التجربة بعد مرور 24 ساعة من آخر مرة.")
             return False
 
-    # إذا لم يبدأ المستخدم التجربة اليوم
-    remaining_hours = max(0, 24 - hours_since_last)
+    # إذا لم يبدأ التجربة بعد
+    remaining_hours = max(0, RENEW_HOURS - hours_since_last)
     st.warning(f"🔒 انتهت التجربة المجانية. يمكنك المحاولة مرة أخرى بعد {remaining_hours:.1f} ساعة")
     return False
+
+# ===============================
+# 🔠 دوال مساعدة
+# ===============================
+def normalize_name(s):
+    if s is None:
+        return ""
+    s = str(s)
+    s = s.replace("\n", "+")
+    s = re.sub(r"[^0-9a-zA-Z\u0600-\u06FF\+\s_/.-]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip().lower()
+    return s
+
+def split_needed_services(needed_service_str):
+    if not isinstance(needed_service_str, str) or needed_service_str.strip() == "":
+        return []
+    parts = re.split(r"\+|,|\n|;", needed_service_str)
+    return [p.strip() for p in parts if p.strip() != ""]
 
 # ===============================
 # ⚙ دالة مقارنة الصيانة
