@@ -5,6 +5,7 @@ import time
 import json
 import os
 import streamlit.components.v1 as components
+
 # ===============================
 # 📂 تحميل البيانات من الإكسيل
 # ===============================
@@ -52,24 +53,23 @@ def save_tokens(tokens):
         json.dump(tokens, f, indent=4, ensure_ascii=False)
 
 # ===============================
-# 🧩 دالة عرض العداد (Client-side) بالـ HTML/JS
+# 🧩 دالة عرض العداد (Client-side)
 # ===============================
 def render_countdown(trial_start_ts, seconds=60):
     """
-    يعرض عدادًا تنازليًا في المتصفح يبدأ من (seconds) اعتمادًا على trial_start_ts (unix seconds).
-    عند انتهاء العدّ يعيد توجيه الصفحة مع expired=1
+    عداد تنازلي بالـ HTML/JS يشتغل فعليًا من لحظة البدء
     """
     html = f"""
-    <div id="countdown" style="font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif;">
+    <div id="countdown" style="font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif; margin-top:10px;">
       <h4>⏳ التجربة المجانية متبقي: <span id='secs'>--</span> ثانية</h4>
       <div style="width:100%; background:#eee; border-radius:6px; height:12px; margin-top:6px;">
-        <div id="bar" style="height:12px; width:0%; background:#4caf50; border-radius:6px;"></div>
+        <div id="bar" style="height:12px; width:100%; background:#4caf50; border-radius:6px; transition:width 1s linear;"></div>
       </div>
     </div>
 
     <script>
-    const start_ts = {int(trial_start_ts)} * 1000; // ms
-    const total = {int(seconds)}; // seconds
+    const start_ts = {int(trial_start_ts)} * 1000;
+    const total = {int(seconds)};
     function update(){{
       const now = Date.now();
       let elapsed = Math.floor((now - start_ts)/1000);
@@ -77,8 +77,7 @@ def render_countdown(trial_start_ts, seconds=60):
       let remaining = total - elapsed;
       if(remaining < 0) remaining = 0;
       document.getElementById('secs').innerText = remaining;
-      const pct = Math.max(0, Math.min(100, ((total - remaining) / total) * 100));
-      document.getElementById('bar').style.width = pct + '%';
+      document.getElementById('bar').style.width = (remaining/total*100) + '%';
       if(remaining <= 0){{
         const url = new URL(window.location.href);
         url.searchParams.set('expired', '1');
@@ -90,10 +89,10 @@ def render_countdown(trial_start_ts, seconds=60):
     update();
     </script>
     """
-    components.html(html, height=100)
+    components.html(html, height=120)
 
 # ===============================
-# 🔑 نظام الـ Tokens (معدّل ليعرض العداد ويترك التفاعل شغّال)
+# 🔑 نظام الـ Tokens (معدّل)
 # ===============================
 def check_token():
     st.subheader("🔐 الدخول / تفعيل رمز تجربة")
@@ -101,9 +100,12 @@ def check_token():
     tokens = load_tokens()
     available_tokens = [t for t, v in tokens.items() if not v.get("used", False)]
 
-    # لو باراميتر expired موجود في الرابط → انتهت التجربة، اطلب باسورد
-    params = st.experimental_get_query_params()
-    if params.get("expired", ["0"])[0] == "1":
+    # ⚙ التبديل إلى st.query_params بدلاً من experimental
+    params = st.query_params
+    expired = params.get("expired", ["0"])[0] if isinstance(params.get("expired"), list) else params.get("expired", "0")
+
+    # إذا انتهت التجربة المجانية
+    if expired == "1":
         st.error("⏰ انتهت التجربة المجانية. أدخل كلمة المرور للمتابعة.")
         password = st.text_input("كلمة المرور:", type="password")
         if password == "1234":
@@ -113,33 +115,30 @@ def check_token():
         else:
             st.stop()
 
-    # لو المستخدم مفعل دخول كامل سابقًا
+    # لو عنده صلاحية دخول كاملة
     if st.session_state.get("access_granted", False):
-        # لو في trial_start نعرض العداد كإشارة لكن السماح بالاستخدام حتى الانتهاء
         if "trial_start" in st.session_state:
             render_countdown(st.session_state["trial_start"], seconds=60)
         return True
 
-    # لو الجلسة التجريبية بدأت بالفعل (server-side) — نتحقق زمنياً ونسمح بالاستخدام
+    # لو التجربة المجانية شغالة
     if "trial_start" in st.session_state:
         elapsed = int(time.time() - st.session_state["trial_start"])
         if elapsed < 60:
-            # عرض العداد client-side
             render_countdown(st.session_state["trial_start"], seconds=60)
             st.info("✅ التجربة المجانية مفعّلة — يمكنك استخدام التطبيق حتى انتهاء العداد.")
             return True
         else:
-            # انتهت التجربة (لم يتم إدخال باسورد بعد)
-            st.error("⏰ انتهت التجربة المجانية. يرجى إدخال كلمة المرور للمتابعة.")
+            st.error("⏰ انتهت التجربة المجانية. أدخل كلمة المرور للمتابعة.")
             password = st.text_input("كلمة المرور:", type="password")
             if password == "1234":
-                st.success("✅ تم تسجيل الدخول بنجاح (بالباسورد).")
+                st.success("✅ تم تسجيل الدخول بنجاح.")
                 st.session_state["access_granted"] = True
                 return True
             else:
                 st.stop()
 
-    # لو لسه في توكنات متاحة، اعرضها للاختيار
+    # لو لسه مفيش جلسة نشطة — عرض التوكنات
     if available_tokens:
         token = st.selectbox("اختر رمز التجربة المجانية:", available_tokens)
         if st.button("تفعيل الرمز"):
@@ -147,14 +146,12 @@ def check_token():
             save_tokens(tokens)
             st.session_state["trial_start"] = time.time()
             st.success(f"🎁 تم تفعيل الرمز ({token}) — التجربة المجانية بدأت الآن لمدة 60 ثانية ⏳")
-            # بعد التفعيل نعيد تحميل الصفحة عشان الـ JS يقرأ القيمة الجديدة
-            st.experimental_rerun()
+            st.rerun()
     else:
-        # لو مفيش توكنات متاحة — اطلب باسورد
         st.warning("🔒 جميع الرموز استخدمت. أدخل كلمة المرور للوصول:")
         password = st.text_input("كلمة المرور:", type="password")
         if password == "1234":
-            st.success("✅ تم تسجيل الدخول بنجاح (بالباسورد).")
+            st.success("✅ تم تسجيل الدخول بنجاح.")
             st.session_state["access_granted"] = True
             return True
         else:
@@ -206,15 +203,12 @@ def check_machine_status(card_num, current_tons, all_sheets):
         last_date = last_row.get("Date", "-")
         last_tons = last_row.get("Tones", "-")
 
-        ignore_cols = ["card", "Tones", "Date", "Current_Tons",
-                       "Service Needed", "Min_Tons", "Max_Tons"]
-
+        ignore_cols = ["card", "Tones", "Date", "Current_Tons", "Service Needed", "Min_Tons", "Max_Tons"]
         for col in card_df.columns:
             if col not in ignore_cols:
                 val = str(last_row.get(col, "")).strip().lower()
                 if val and val not in ["nan", "none", ""]:
                     done_services.append(col)
-
         if done_services:
             status = "✅ تم تنفيذ صيانة في هذه الشريحة"
 
@@ -232,34 +226,7 @@ def check_machine_status(card_num, current_tons, all_sheets):
         "Status": status,
     }
 
-    result_df = pd.DataFrame([result])
-
-    def highlight(val, col_name):
-        if col_name == "Service Needed":
-            return "background-color: #fff3cd; color: #856404; font-weight: bold;"
-        elif col_name == "Done Services":
-            return "background-color: #d4edda; color: #155724; font-weight: bold;"
-        elif col_name == "Not Done Services":
-            return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
-        elif col_name == "Status":
-            if "✅" in val:
-                return "background-color: #c3e6cb; color: #155724;"
-            else:
-                return "background-color: #f5c6cb; color: #721c24;"
-        return ""
-
-    def style_table(row):
-        return [highlight(row[col], col) for col in row.index]
-
-    styled_df = result_df.style.apply(style_table, axis=1)
-    st.dataframe(styled_df, use_container_width=True)
-
-    save = st.button("💾 حفظ النتيجة في Excel")
-    if save:
-        result_df.to_excel("Machine_Result.xlsx", index=False)
-        st.success("✅ تم حفظ النتيجة في ملف 'Machine_Result.xlsx' بنجاح.")
-
-    return result_df
+    st.dataframe(pd.DataFrame([result]), use_container_width=True)
 
 # ===============================
 # 🖥 واجهة Streamlit
@@ -271,6 +238,5 @@ if check_token():
     st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
     card_num = st.number_input("رقم الماكينة:", min_value=1, step=1)
     current_tons = st.number_input("عدد الأطنان الحالية:", min_value=0, step=100)
-
     if st.button("عرض الحالة"):
         check_machine_status(card_num, current_tons, all_sheets)
