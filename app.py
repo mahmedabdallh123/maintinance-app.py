@@ -39,7 +39,7 @@ def split_needed_services(needed_service_str):
 
 
 # ===============================
-# 🔑 نظام الـ Tokens لتجربة مجانية
+# 🔑 نظام الـ Tokens (إدخال يدوي)
 # ===============================
 TOKENS_FILE = "tokens.json"
 
@@ -52,35 +52,41 @@ def load_tokens():
 
 def save_tokens(tokens):
     with open(TOKENS_FILE, "w") as f:
-        json.dump(tokens, f, indent=4)
+        json.dump(tokens, f, indent=4, ensure_ascii=False)
 
 def check_token():
-    query_params = st.query_params
-    token = query_params.get("token", [None])[0]
-
-    if not token:
-        st.error("🚫 لم يتم تمرير رمز (token) في الرابط.")
-        st.stop()
+    st.subheader("🔐 الدخول إلى النظام")
 
     tokens = load_tokens()
+    available_tokens = [t for t, v in tokens.items() if not v.get("used", False)]
+    used_tokens = [t for t, v in tokens.items() if v.get("used", False)]
 
-    if token not in tokens:
-        st.error("❌ هذا الرمز غير صالح أو غير مسموح به.")
+    # لو مفيش رموز خالص
+    if not tokens:
+        st.error("❌ لا توجد رموز متاحة في الملف tokens.json.")
         st.stop()
 
-    if tokens[token]["used"]:
-        st.error("🔒 تم استخدام هذا الرابط مسبقًا. يرجى إدخال كلمة المرور للمتابعة.")
+    # لو في رموز غير مستخدمة
+    if available_tokens:
+        token = st.selectbox("اختر رمز التجربة المجانية:", available_tokens)
+        if st.button("تفعيل الرمز"):
+            tokens[token]["used"] = True
+            save_tokens(tokens)
+            st.success(f"✅ تم تفعيل الرمز ({token}) بنجاح! يمكنك الدخول الآن.")
+            st.session_state["access_granted"] = True
+            st.rerun()
+    else:
+        # كل الرموز مستخدمة → نطلب باسورد
+        st.warning("🔒 جميع الرموز استخدمت. أدخل كلمة المرور للوصول:")
         password = st.text_input("كلمة المرور:", type="password")
         if password == "1234":
             st.success("✅ تم تسجيل الدخول بنجاح.")
-            return True
+            st.session_state["access_granted"] = True
+            st.rerun()
         else:
             st.stop()
-    else:
-        st.info("🎁 تجربة مجانية متاحة لهذا الرابط. سيتم تسجيلها الآن.")
-        tokens[token]["used"] = True
-        save_tokens(tokens)
-        return True
+
+    return st.session_state.get("access_granted", False)
 
 
 # ===============================
