@@ -27,6 +27,7 @@ def normalize_name(s):
     s = re.sub(r"\s+", " ", s).strip().lower()
     return s
 
+
 def split_needed_services(needed_service_str):
     if not isinstance(needed_service_str, str) or needed_service_str.strip() == "":
         return []
@@ -114,9 +115,6 @@ def check_machine_status(card_num, current_tons, all_sheets):
     done_services, last_date, last_tons = [], "-", "-"
     status = "❌ لم يتم تنفيذ صيانة في هذه الشريحة"
 
-    done_services, last_date, last_tons = [], "-", "-"
-    status = "❌ لم يتم تنفيذ صيانة في هذه الشريحة"
-
     if not slice_df.empty:
         last_row = slice_df.iloc[-1]
         last_date = last_row.get("Date", "-")
@@ -134,11 +132,58 @@ def check_machine_status(card_num, current_tons, all_sheets):
         if done_services:
             status = "✅ تم تنفيذ صيانة في هذه الشريحة"
 
-     st.title("🔧 نظام متابعة الصيانة التنبؤية")
+    done_norm = [normalize_name(c) for c in done_services]
+    not_done = [orig for orig, n in zip(needed_parts, needed_norm) if n not in done_norm]
 
-# تفعيل الأمان أولًا
+    result = {
+        "Card": card_num,
+        "Current_Tons": current_tons,
+        "Service Needed": " + ".join(needed_parts) if needed_parts else "-",
+        "Done Services": ", ".join(done_services) if done_services else "-",
+        "Not Done Services": ", ".join(not_done) if not_done else "-",
+        "Date": last_date,
+        "Tones": last_tons,
+        "Status": status,
+    }
+
+    result_df = pd.DataFrame([result])
+
+    # 🎨 تلوين الجدول
+    def highlight(val, col_name):
+        if col_name == "Service Needed":
+            return "background-color: #fff3cd; color: #856404; font-weight: bold;"
+        elif col_name == "Done Services":
+            return "background-color: #d4edda; color: #155724; font-weight: bold;"
+        elif col_name == "Not Done Services":
+            return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
+        elif col_name == "Status":
+            if "✅" in val:
+                return "background-color: #c3e6cb; color: #155724;"
+            else:
+                return "background-color: #f5c6cb; color: #721c24;"
+        return ""
+
+    def style_table(row):
+        return [highlight(row[col], col) for col in row.index]
+
+    styled_df = result_df.style.apply(style_table, axis=1)
+    st.dataframe(styled_df, use_container_width=True)
+
+    # 💾 خيار حفظ النتيجة
+    save = st.button("💾 حفظ النتيجة في Excel")
+    if save:
+        result_df.to_excel("Machine_Result.xlsx", index=False)
+        st.success("✅ تم حفظ النتيجة في ملف 'Machine_Result.xlsx' بنجاح.")
+
+    return result_df
+
+
+# ===============================
+# 🖥 واجهة Streamlit
+# ===============================
 security_timer()
 
+st.title("🔧 نظام متابعة الصيانة التنبؤية")
 st.write("أدخل رقم الماكينة وعدد الأطنان الحالية لمعرفة حالة الصيانة")
 
 all_sheets = load_all_sheets()
