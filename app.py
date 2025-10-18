@@ -4,7 +4,7 @@ import re
 import time
 import json
 import os
-
+import streamlit.components.v1 as components
 # ===============================
 # 📂 تحميل البيانات من الإكسيل
 # ===============================
@@ -51,61 +51,118 @@ def save_tokens(tokens):
     with open(TOKENS_FILE, "w") as f:
         json.dump(tokens, f, indent=4, ensure_ascii=False)
 
+# ===============================
+# 🧩 دالة عرض العداد (Client-side) بالـ HTML/JS
+# ===============================
+def render_countdown(trial_start_ts, seconds=60):
+    """
+    يعرض عدادًا تنازليًا في المتصفح يبدأ من (seconds) اعتمادًا على trial_start_ts (unix seconds).
+    عند انتهاء العدّ يعيد توجيه الصفحة مع expired=1
+    """
+    html = f"""
+    <div id="countdown" style="font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif;">
+      <h4>⏳ التجربة المجانية متبقي: <span id="secs'>--</span> ثانية</h4>
+      <div style="width:100%; background:#eee; border-radius:6px; height:12px; margin-top:6px;">
+        <div id="bar" style="height:12px; width:0%; background:#4caf50; border-radius:6px;"></div>
+      </div>
+    </div>
+
+    <script>
+    const start_ts = {int(trial_start_ts)} * 1000; // ms
+    const total = {int(seconds)}; // seconds
+    function update(){
+      const now = Date.now();
+      let elapsed = Math.floor((now - start_ts)/1000);
+      if(elapsed < 0) elapsed = 0;
+      let remaining = total - elapsed;
+      if(remaining < 0) remaining = 0;
+      document.getElementById('secs').innerText = remaining;
+      const pct = Math.max(0, Math.min(100, ((total - remaining) / total) * 100));
+      document.getElementById('bar').style.width = pct + '%';
+      if(remaining <= 0){
+        const url = new URL(window.location.href);
+        url.searchParams.set('expired', '1');
+        window.location.href = url.toString();
+      } else {
+        setTimeout(update, 1000);
+      }
+    }
+    update();
+    </script>
+    """
+    # height small enough to show content
+    components.html(html, height=90)
+
+
+# ===============================
+# 🔑 نظام الـ Tokens (معدّل ليعرض العداد ويترك التفاعل شغّال)
+# ===============================
 def check_token():
-    st.subheader("🔐 الدخول إلى النظام")
+    st.subheader("🔐 الدخول / تفعيل رمز تجربة")
 
     tokens = load_tokens()
     available_tokens = [t for t, v in tokens.items() if not v.get("used", False)]
 
-    if not tokens:
-        st.error("❌ لا توجد رموز متاحة في الملف tokens.json.")
-        st.stop()
-
-    # إذا المستخدم دخل قبل كده
-    if "access_granted" in st.session_state and st.session_state["access_granted"]:
-        if "countdown_start" not in st.session_state:
-            st.session_state["countdown_start"] = time.time()
-
-        remaining = 60 - int(time.time() - st.session_state["countdown_start"])
-
-        if remaining > 0:
-            st.markdown(
-                f"<h3 style='color:green;'>⏳ وقت التجربة المتبقي: {remaining} ثانية</h3>",
-                unsafe_allow_html=True
-            )
-            time.sleep(1)
-            st.rerun()
+    # لو باراميتر expired موجود في الرابط → انتهت التجربة، اطلب باسورد
+    params = st.experimental_get_query_params()
+    if params.get("expired", ["0"])[0] == "1":
+        st.error("⏰ انتهت التجربة المجانية. أدخل كلمة المرور للمتابعة.")
+        password = st.text_input("كلمة المرور:", type="password")
+        if password == "1234":
+            st.success("✅ تم تسجيل الدخول بنجاح (بالباسورد).")
+            st.session_state["access_granted"] = True
+            return True
         else:
-            st.error("⏰ انتهى وقت التجربة المجانية. يرجى إدخال كلمة المرور للمتابعة.")
+            st.stop()
+
+    # لو المستخدم مفعل دخول كامل سابقًا
+    if st.session_state.get("access_granted", False):
+        # لو في trial_start نعرض العداد كإشارة لكن السماح بالاستخدام حتى الانتهاء
+        if "trial_start" in st.session_state:
+            render_countdown(st.session_state["trial_start"], seconds=60)
+        return True
+
+    # لو الجلسة التجريبية بدأت بالفعل (server-side) — نتحقق زمنياً ونسمح بالاستخدام
+    if "trial_start" in st.session_state:
+        elapsed = int(time.time() - st.session_state["trial_start"])
+        if elapsed < 60:
+            # عرض العداد client-side
+            render_countdown(st.session_state["trial_start"], seconds=60)
+            st.info("✅ التجربة المجانية مفعّلة — يمكنك استخدام التطبيق حتى انتهاء العداد.")
+            return True
+        else:
+            # انتهت التجربة (لم يتم إدخال باسورد بعد)
+            st.error("⏰ انتهت التجربة المجانية. يرجى إدخال كلمة المرور للمتابعة.")
             password = st.text_input("كلمة المرور:", type="password")
             if password == "1234":
-                st.success("✅ تم تسجيل الدخول بنجاح.")
+                st.success("✅ تم تسجيل الدخول بنجاح (بالباسورد).")
+                st.session_state["access_granted"] = True
                 return True
             else:
                 st.stop()
-        return True
 
-    # أول مرة يفتح
+    # لو لسه في توكنات متاحة، اعرضها للاختيار
     if available_tokens:
         token = st.selectbox("اختر رمز التجربة المجانية:", available_tokens)
         if st.button("تفعيل الرمز"):
             tokens[token]["used"] = True
             save_tokens(tokens)
-            st.session_state["access_granted"] = True
-            st.session_state["countdown_start"] = time.time()
-            st.success(f"✅ تم تفعيل الرمز ({token}) بنجاح! تبدأ التجربة المجانية الآن ⏳")
-            st.rerun()
+            st.session_state["trial_start"] = time.time()
+            st.success(f"🎁 تم تفعيل الرمز ({token}) — التجربة المجانية بدأت الآن لمدة 60 ثانية ⏳")
+            # بعد التفعيل نعيد تحميل الصفحة عشان الـ JS يقرأ القيمة الجديدة
+            st.experimental_rerun()
     else:
+        # لو مفيش توكنات متاحة — اطلب باسورد
         st.warning("🔒 جميع الرموز استخدمت. أدخل كلمة المرور للوصول:")
         password = st.text_input("كلمة المرور:", type="password")
         if password == "1234":
-            st.success("✅ تم تسجيل الدخول بنجاح.")
+            st.success("✅ تم تسجيل الدخول بنجاح (بالباسورد).")
             st.session_state["access_granted"] = True
-            st.rerun()
+            return True
         else:
             st.stop()
 
-    return st.session_state.get("access_granted", False)
+    return False
 
 # ===============================
 # ⚙ دالة مقارنة الصيانة
