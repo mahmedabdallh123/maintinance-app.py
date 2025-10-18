@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
+from io import BytesIO
 
 # ===============================
 # 📂 تحميل البيانات من الإكسيل
@@ -111,10 +112,12 @@ def check_machine_status(card_num, current_tons, all_sheets):
 
     # 🎨 تلوين الجدول حسب الأعمدة
     def highlight_columns(val, col_name, status):
-        if col_name == "Done Services" or ("تم تنفيذ" in status and col_name == "Status"):
-            return "background-color: #d4edda; color: #155724; font-weight: bold;"  # أخضر فاتح
+        if col_name == "Service Needed":
+            return "background-color: #fff3cd; color: #856404; font-weight: bold;"  # 🟡 أصفر فاتح
+        elif col_name == "Done Services" or ("تم تنفيذ" in status and col_name == "Status"):
+            return "background-color: #d4edda; color: #155724; font-weight: bold;"  # 🟢 أخضر فاتح
         elif col_name == "Not Done Services" or ("لم يتم" in status and col_name == "Status"):
-            return "background-color: #f8d7da; color: #721c24; font-weight: bold;"  # أحمر فاتح
+            return "background-color: #f8d7da; color: #721c24; font-weight: bold;"  # 🔴 أحمر فاتح
         else:
             return ""
 
@@ -123,6 +126,20 @@ def check_machine_status(card_num, current_tons, all_sheets):
 
     styled_df = result_df.style.apply(style_table, axis=1)
     st.dataframe(styled_df, use_container_width=True)
+
+    # 💾 خيار تحميل النتيجة كملف Excel
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        result_df.to_excel(writer, index=False, sheet_name="Result")
+    excel_data = output.getvalue()
+
+    st.download_button(
+        label="💾 تحميل النتيجة كملف Excel",
+        data=excel_data,
+        file_name=f"Service_Result_Card{card_num}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
     return result_df
 
 
